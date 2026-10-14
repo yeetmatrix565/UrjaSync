@@ -1,0 +1,7 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.iml
+.idea/
+.commandcode/
+# Subproject-specific ignores live in web/.gitignore and android/.gitignore

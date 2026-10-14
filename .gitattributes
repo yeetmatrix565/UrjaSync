@@ -1,0 +1,20 @@
+# Normalise line endings so Windows/macOS/Linux contributors agree.
+* text=auto eol=lf
+
+# Windows-only scripts need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+gradlew.bat text eol=crlf
+gradlew text eol=lf
+
+# Binaries - never touch.
+*.jar binary
+*.apk binary
+*.aab binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

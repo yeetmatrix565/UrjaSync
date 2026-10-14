@@ -1,0 +1,7 @@
+# Only what the :dashboard module uses. The stock template's AndroidX/Material
+# entries were dropped along with the android-app module.
+[versions]
+agp = "9.3.3"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
