@@ -51,8 +51,17 @@ const TelemetryContext = createContext<TelemetryContextValue | null>(null);
  * and the detail screens showing identical numbers.
  */
 export function TelemetryProvider({ children }: { children: ReactNode }) {
-  const { latest, history, lastFetchedAt, error, loading, isDemo, hasCredentials, mapping, refresh } =
-    useTelemetry();
+  const {
+    latest,
+    history,
+    lastFetchedAt,
+    error,
+    loading,
+    isDemo,
+    hasCredentials,
+    mapping,
+    refresh,
+  } = useTelemetry();
   const reducedMotion = useReducedMotion();
   const { valuesRef, snapshot } = useTelemetryLerp(latest, reducedMotion);
   const now = useNow(1000);
@@ -64,7 +73,10 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   const alerts = useMemo(() => latest?.alerts ?? [], [latest]);
 
   // A transport error means what's on screen is no longer fresh, even if the
-  // last payload we hold said LIVE.
+  // last payload we hold said LIVE. Deliberately STALE, not OFFLINE and not
+  // a wipe: useTelemetry keeps last-known latest/history on transient
+  // failure, so the provider must keep deriving from them (metrics, energy,
+  // alerts) and only downgrade the status until the next successful poll.
   const status: Status = latest ? (error ? 'STALE' : latest.status) : 'OFFLINE';
 
   const value = useMemo<TelemetryContextValue>(

@@ -25,8 +25,8 @@ ESP32 BMS --> ThingSpeak channel
    +-----------------+------------------+
    |                                    |
  browser                        android/ WebView
- (static bundle, demo only)     (bundle in assets + credentials
-                                 from the native settings screen)
+ (static bundle, ConnectPrompt  (bundle in assets + credentials
+  until configured)             from the native settings screen)
 ```
 
 The Android shell hosts the compiled dashboard from its own APK assets through a
@@ -39,6 +39,10 @@ Each user brings **their own** channel:
 
 - **Channel ID + read API key** are entered in the app's native settings screen and
   stored encrypted at rest (AES/GCM with a key held in the Android Keystore).
+- There is **no `.env` file and no server-side env**: credentials do not come
+  from `web/.env.local` (that example file was deleted - the server env module
+  it documented no longer exists). In a plain browser there is nowhere to enter
+  credentials, so the dashboard shows a ConnectPrompt instead of live data.
 - The app reads the channel's own **field labels** (`Pack Voltage (V)`, `Cell 1 (V)`,
   `Temperatura (°C)`, …) and works out which field carries which metric, so it is not
   tied to one firmware's field order. Anything it cannot recognise falls back to the
@@ -71,9 +75,11 @@ app unpacks it into internal storage on first launch. That indirection exists be
 of them (`_next/`, `static/chunks/app/_not-found/`). Shipping loose files produced an APK
 that loaded `index.html` and then failed to fetch a single JS or CSS file.
 
-In a plain browser the dashboard runs in **demo mode**: a synthetic, self-advancing
-payload travels through the exact same detector and parser as live data, so the whole
-UI (including alerts) is exercisable with no configuration.
+With no channel configured the dashboard shows a **ConnectPrompt**, not numbers:
+it never invents telemetry. Synthetic data exists only via an explicit
+`?scenario=` override (see "Exercise the failure paths"), which sends a fixture
+through the exact same detector and parser as live data, so the whole UI
+(including alerts) is exercisable with no hardware.
 
 ## Android
 
@@ -86,14 +92,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 The Gradle build copies `web/out` into `src/main/assets` (gitignored, generated) and
 **fails with instructions** if the export is missing, so an empty app cannot ship quietly.
 
-On first launch the app is in demo mode; tap the gear in the header, enter the channel ID
-and read key, and it switches to live data immediately.
+On first launch the app shows a ConnectPrompt; tap the gear in the header, enter the
+channel ID and read key, and it switches to live data immediately.
 
 Open `UrjaSync/android` (not the repo root) in Android Studio.
 
 ## Exercise the failure paths
 
-The dashboard forwards a `scenario` query parameter to the demo fixtures:
+The dashboard forwards a `scenario` query parameter to the demo fixtures.
+This is the **only** way to get synthetic data - nothing falls back to demo
+on its own, and with no channel and no `scenario` the dashboard shows a
+ConnectPrompt.
 
 | URL                    | Behaviour                                                       |
 | ---------------------- | --------------------------------------------------------------- |
@@ -119,16 +128,27 @@ CI runs the same for `web`, then builds the web export before assembling the APK
 
 ```
 web/
-  src/app/                    dashboard page, error/loading/not-found
-  src/components/dashboard/   glassmorphism widgets (stat cards, cells, graphs, feed)
-  src/components/three/       R3F canvas wrapper + scene/ (Pack, CellLabel)
-  src/hooks/                  polling, smoothing, clock, reduced-motion
-  src/lib/telemetry/          types, constants, schema, rules, parser, detector, fixtures
+  src/app/                    dashboard (/) + detail routes: voltage, current,
+                              power, energy, temperature, health, pack,
+                              insights; layout (TelemetryProvider), error,
+                              loading, not-found
+  src/components/dashboard/   glassmorphism widgets (stat cards, cells, graphs,
+                              feed, ConnectPrompt, SettingsButton, SummaryBar, …)
+  src/components/providers/   TelemetryProvider (one poll for the whole app)
+  src/components/three/      R3F canvas wrapper + scene/ (Pack, CellLabel)
+  src/components/ui/          shared UI (MetricCard/FormulaCard, charts, badges)
+  src/hooks/                  useTelemetry (polling), useTelemetryLerp
+                              (smoothing), useNow, useReducedMotion
+  src/lib/telemetry/          types, constants, schema, rules, parse, detect,
+                              client, bridge, derive, values, mock (+ tests)
+  src/lib/electrical/         energy, stats, numeric, formulas (+ tests)
   src/lib/three/              pure three.js builders (materials, particles)
 android/
   app/src/main/java/com/example/urjasync/dashboard/
-                              MainActivity (asset loader + JS bridge), SettingsActivity,
+                              MainActivity (asset loader + JS bridge),
+                              SplashActivity, SettingsActivity,
                               SecureStore (Keystore)
+  app/src/main/res/layout/    activity_splash.xml, activity_settings.xml
 ```
 
 ## Design notes
@@ -147,8 +167,9 @@ android/
 
 ## Known limitations
 
-- The **browser build is demo-only**: credentials live in the native settings screen, so
-  real data is only read by the app.
+- The **browser build has no way to enter credentials**: they live in the
+  native settings screen, so real data is only read by the app. In a browser,
+  use `?scenario=` (above) to exercise the UI with fixtures.
 - A detected mapping cannot yet be **overridden** from the UI. Detection is heuristic;
   if it guesses wrong for an unusual sketch, the app falls back to the reference layout
   rather than letting the user correct it in place.

@@ -50,7 +50,7 @@
             android:layout_height="wrap_content"
             android:hint="@string/settings_key_hint"
             android:importantForAutofill="no"
-            android:inputType="textNoSuggestions"
+            android:inputType="textPassword"
             android:maxLines="1"
             android:textColorHint="#5A6672" />
 

@@ -12,8 +12,17 @@ body {
   overflow-x: hidden;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: theme('colors.base');
+  /* Faint cyan + warm glows so the dark background has depth without noise. */
+  background-image:
+    radial-gradient(1200px 600px at 50% -10%, rgba(34, 211, 238, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 85% 0%, rgba(245, 165, 36, 0.05), transparent 60%);
+  background-attachment: fixed;
   color: #e6edf3;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -23,18 +32,58 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Visible keyboard focus everywhere, even on elements that do not carry the
+   .focus-ring utility. Components that draw their own ring opt out. */
+:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.85);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #ffffff;
+}
+
 @layer components {
+  /* Refined glass: subtler blur (less noise behind content), a hairline top
+     highlight for depth, and a softer drop shadow than the old blur-xl card. */
   .glass {
-    @apply rounded-2xl border border-white/10 bg-white/[0.05] shadow-glass backdrop-blur-xl;
+    @apply rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
+  /* Primary card surface: one step above .glass for hero / headline blocks. */
+  .glass-strong {
+    @apply rounded-2xl border border-white/[0.12] bg-white/[0.06] backdrop-blur-md;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  /* Small-caps section label. Brighter than before: white/45 on near-black
+     failed contrast for real labels, so labels now sit at white/60. */
   .label-xs {
-    @apply font-mono text-[10px] uppercase tracking-[0.18em] text-white/45;
+    @apply font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-white/60;
   }
 
   .num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
+  }
+
+  /* Shared focus ring for interactive cards / buttons that draw their own
+     focus state instead of the global outline. Pair with focus-visible:. */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070a];
+  }
+
+  /* Shared card interaction: gentle lift + border glow on hover, press
+     feedback on tap. Transitions are killed under reduced motion below. */
+  .card-interactive {
+    @apply transition duration-200 ease-out hover:-translate-y-0.5 hover:border-cyan-300/30 hover:shadow-glowCyan active:translate-y-0 active:scale-[0.99];
   }
 }
 
@@ -51,5 +100,38 @@ body {
   }
   .snap-item {
     scroll-snap-align: start;
+  }
+  /* Skeleton shimmer: a soft sweep across a placeholder, no layout shift. */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+}
+
+/* Respect prefers-reduced-motion globally: no pulsing dots, no sliding
+   banners, no hover lifts, no smooth scrolling for users who asked for less. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -88,6 +88,66 @@ describe('detectMapping', () => {
     expect(detectMapping(labels('Temperature (C)')).tempUnit).toBe('C');
   });
 
+  it('detects Fahrenheit from the raw label, with or without brackets', () => {
+    // detectTempUnit must see the raw label: normalise() strips bracketed
+    // units, so '(F)' would be lost if the normalised text were passed.
+    expect(detectMapping(labels('Temperature (F)')).tempUnit).toBe('F');
+    expect(detectMapping(labels('Temperature Fahrenheit')).tempUnit).toBe('F');
+    expect(detectMapping(labels('Temperature Fahrenheit (F)')).tempUnit).toBe('F');
+    expect(detectMapping(labels('Temp F')).tempUnit).toBe('F');
+    expect(detectMapping(labels('Temperature (C)')).tempUnit).toBe('C');
+    expect(detectMapping(labels('Temperature Celsius')).tempUnit).toBe('C');
+    expect(detectMapping(labels('Temperature Centigrade')).tempUnit).toBe('C');
+  });
+
+  it('never maps a pack label to a cell (Pack V1 regression)', () => {
+    // 'Pack V1' used to match the old /\bv\s*(\d+)/ cell pattern as Cell 1.
+    expect(detectMapping(labels('Pack V1 (V)', 'Cell 1 (V)'))).toEqual({
+      packV: 1,
+      cellV: [2],
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Current (A)', 'Pack V1 (V)'))).toEqual({
+      packV: 2,
+      cellV: [],
+      currentA: 1,
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Pack V1'))).toEqual({
+      packV: 1,
+      cellV: [],
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Pack Voltage (V)', 'Cell 1 (V)'))).toEqual({
+      packV: 1,
+      cellV: [2],
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Pack Voltage'))).toEqual({
+      packV: 1,
+      cellV: [],
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Pack V (V)', 'Cell 1 (V)'))).toEqual({
+      packV: 1,
+      cellV: [2],
+      tempUnit: 'C',
+    });
+    expect(detectMapping(labels('Pack V'))).toEqual({
+      packV: 1,
+      cellV: [],
+      tempUnit: 'C',
+    });
+  });
+
+  it('still maps explicit cell labels, in any case/separator', () => {
+    expect(detectMapping(labels('Cell 1 (V)')).cellV).toEqual([1]);
+    expect(detectMapping(labels('CELL 1 (V)')).cellV).toEqual([1]);
+    expect(detectMapping(labels('Cell-1 (V)')).cellV).toEqual([1]);
+    expect(detectMapping(labels('cell1')).cellV).toEqual([1]);
+    expect(detectMapping(labels('c1')).cellV).toEqual([1]);
+  });
+
   it('copes with non-English labels', () => {
     expect(detectMapping(labels('Temperatura (\u00b0C)')).tempC).toBe(1);
   });

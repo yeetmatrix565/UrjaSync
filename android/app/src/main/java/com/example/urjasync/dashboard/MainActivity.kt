@@ -3,6 +3,7 @@ package com.example.urjasync.dashboard
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.os.Bundle
 import android.view.ViewGroup
@@ -40,7 +41,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        WebView.setWebContentsDebuggingEnabled(true)
+        // WebView remote debugging only on debuggable (debug) builds. Deliberately
+        // NOT BuildConfig.DEBUG: app/build.gradle.kts enables no
+        // buildFeatures.buildConfig, so BuildConfig is not generated for this
+        // module and referencing it would not compile. The manifest
+        // debuggable flag is the equivalent debug-only check and always exists.
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         store = SecureStore(this)
 
         // The bundle ships as a zip because aapt2 drops assets whose path segments

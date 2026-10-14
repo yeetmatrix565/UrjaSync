@@ -1,0 +1,126 @@
+name: Release
+
+# A tag is the release trigger, so the artifact and the version in it always
+# agree. Tag format is v<major>.<minor>.<patch>, e.g. v1.2.0.
+on:
+  push:
+    tags: ['v*']
+
+# Required to create the GitHub Release. Everything else here is read-only.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: signed release apk + aab
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Refuse a malformed tag up front rather than shipping a mislabelled build.
+      - name: Derive version from the tag
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          name="${tag#v}"
+          if ! [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$tag' must look like v1.2.3."
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$name"
+          # Android wants a monotonically increasing integer, so the semantic
+          # version is packed into one: 1.2.3 -> 10203.
+          code=$((major * 10000 + minor * 100 + patch))
+          {
+            echo "name=$name"
+            echo "code=$code"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $name (versionCode $code)"
+
+      # The APK bundles the dashboard, so the static export has to exist first.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # `packages` must be explicit: the action's default asks sdkmanager for the
+      # legacy "tools" package, which no longer exists, and the step fails before
+      # Gradle runs. IDs match `sdkmanager --list_installed` on the dev machine.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode the signing keystore
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.URJA_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Secret URJA_KEYSTORE_BASE64 is not set. See RELEASING.md."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.keystore
+
+      - name: Build signed release
+        working-directory: android
+        env:
+          URJA_KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
+          URJA_KEYSTORE_PASSWORD: ${{ secrets.URJA_KEYSTORE_PASSWORD }}
+          URJA_KEY_ALIAS: ${{ secrets.URJA_KEY_ALIAS }}
+          URJA_KEY_PASSWORD: ${{ secrets.URJA_KEY_PASSWORD }}
+        run: |
+          for v in URJA_KEYSTORE_PASSWORD URJA_KEY_ALIAS URJA_KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret $v is not set. See RELEASING.md."
+              exit 1
+            fi
+          done
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease :app:bundleRelease \
+            -PappVersionName=${{ steps.version.outputs.name }} \
+            -PappVersionCode=${{ steps.version.outputs.code }} \
+            --no-daemon
+
+      # Never leave the keystore on the runner beyond this job.
+      - name: Remove the keystore
+        if: always()
+        run: rm -f android/release.keystore
+
+      # Proves the artifact really is signed and by which key, instead of trusting
+      # that the secrets were picked up.
+      - name: Verify the signature
+        run: |
+          set -euo pipefail
+          apk=$(ls android/app/build/outputs/apk/release/*.apk | head -n1)
+          echo "apk: $apk"
+          if [[ "$apk" == *-unsigned.apk ]]; then
+            echo "::error::$apk is unsigned - the signing secrets did not reach the build."
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: UrjaSync ${{ steps.version.outputs.name }}
+          generate_release_notes: true
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab

@@ -43,20 +43,26 @@ function EventFeedBase({ history }: { history: Telemetry[] }) {
   }, [history]);
 
   return (
-    <section className="glass p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="label-xs">Live feed</h2>
-        <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
+    <section className="glass p-3.5 sm:p-4" aria-labelledby="feed-heading">
+      <div className="mb-2.5 flex items-center justify-between">
+        <h2 id="feed-heading" className="label-xs">
+          Live feed
+        </h2>
+        <span className="font-mono text-[9px] uppercase tracking-widest text-white/45">
           newest first
         </span>
       </div>
 
       {events.length === 0 ? (
-        <p className="py-6 text-center font-mono text-[11px] text-white/30">
+        <p className="py-6 text-center font-mono text-[11px] text-white/50" role="status">
           no telemetry yet
         </p>
       ) : (
-        <ul className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
+        <ul
+          className="max-h-64 space-y-0.5 overflow-y-auto pr-1"
+          role="log"
+          aria-label="Telemetry events, newest first"
+        >
           {events.map((e) => (
             <li
               key={e.id}
@@ -64,19 +70,21 @@ function EventFeedBase({ history }: { history: Telemetry[] }) {
                 'flex items-start gap-2 rounded-lg px-2 py-1 font-mono text-[11px] leading-relaxed',
                 e.kind === 'alert' &&
                   (e.severity === 'critical'
-                    ? 'border-l-2 border-l-brand-red bg-brand-red/10 text-red-200'
-                    : 'border-l-2 border-l-brand-amber bg-brand-amber/10 text-amber-200'),
+                    ? 'border-l-2 border-l-brand-red bg-brand-red/10 text-red-100'
+                    : 'border-l-2 border-l-brand-amber bg-brand-amber/10 text-amber-100'),
               )}
             >
-              <span className="shrink-0 tabular-nums text-white/35">
+              <span className="shrink-0 tabular-nums text-white/55">
                 {localTime(e.ts)}
               </span>
-              <span className="text-white/25">{'\u2014'}</span>
+              <span className="text-white/40" aria-hidden="true">
+                {'\u2014'}
+              </span>
               <span className="num min-w-0 flex-1">
                 {e.kind === 'alert' ? (
                   <span className="font-medium uppercase tracking-wider">{e.text}</span>
                 ) : (
-                  <span className="text-white/55">{e.text}</span>
+                  <span className="text-white/70">{e.text}</span>
                 )}
               </span>
             </li>

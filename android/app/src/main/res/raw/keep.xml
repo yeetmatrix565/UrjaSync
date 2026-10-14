@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resource-shrinker keep rules.
+
+  SplashActivity resolves the intro clip BY NAME at runtime:
+
+      resources.getIdentifier("intro", "raw", packageName)
+
+  That lookup is invisible to the shrinker, which only sees static references, so
+  with shrinkResources enabled it would strip res/raw/intro.mp4 out of the release
+  APK and the intro would simply stop playing.
+
+  The wildcard is deliberate: it keeps every raw resource without demanding that
+  `intro.mp4` exist, so the app still builds and runs with no clip supplied - which
+  is the whole point of resolving it by name in the first place.
+-->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/*" />

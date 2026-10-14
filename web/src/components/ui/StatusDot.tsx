@@ -31,13 +31,14 @@ export function StatusDot({
     <span className={cx('inline-flex items-center gap-1.5', className)}>
       <span
         className={cx(
-          'h-1.5 w-1.5 rounded-full',
+          'h-2 w-2 shrink-0 rounded-full',
           DOT[status],
-          status === 'critical' && 'animate-pulseSoft',
+          status === 'critical' && 'animate-pulseSoft motion-reduce:animate-none',
         )}
+        aria-hidden="true"
       />
       {withLabel ? (
-        <span className="font-mono text-[9px] uppercase tracking-widest text-white/45">
+        <span className="font-mono text-[9px] uppercase tracking-widest text-white/60">
           {LABEL[status]}
         </span>
       ) : (

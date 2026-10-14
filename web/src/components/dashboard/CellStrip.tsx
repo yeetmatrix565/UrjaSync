@@ -16,6 +16,12 @@ export interface CellStripProps {
 /**
  * Renders however many cells the channel publishes - a 1S pack shows one card,
  * an 8S pack shows eight - instead of assuming three.
+ *
+ * Layout: a wrapping flex row with a 76px minimum tile, so an 8S pack wraps
+ * to two rows on a phone instead of squeezing eight unreadable columns into
+ * 320px. Each tile is a toggle button with aria-pressed for its selected
+ * state, and a full text label for screen readers (the dot alone is not a
+ * status indicator).
  */
 export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps) {
   const flagged = new Set(alertedCellIndexes(alerts));
@@ -23,17 +29,17 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
 
   if (cells.length === 0) {
     return (
-      <p className="glass p-4 text-center font-mono text-[11px] text-white/35">
+      <p
+        className="glass p-4 text-center font-mono text-[11px] text-white/50"
+        role="status"
+      >
         no cell voltages published by this channel
       </p>
     );
   }
 
   return (
-    <div
-      className="grid gap-2 sm:gap-3"
-      style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
-    >
+    <div className="flex flex-wrap gap-2 sm:gap-3" role="group" aria-label="Cells">
       {cells.map((v, i) => {
         const hasValue = v !== null && Number.isFinite(v);
         const pct = hasValue ? clamp((v - VOLT_USABLE.min) / span, 0, 1) * 100 : 0;
@@ -46,8 +52,10 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
             key={i}
             type="button"
             onClick={() => onSelect(isActive ? null : i)}
+            aria-pressed={isActive}
+            aria-label={`Cell ${i + 1}, ${fmt(v, 2)} volts${hasAlert ? ', alert' : ''}${isActive ? ', selected' : ''}`}
             className={cx(
-              'glass flex flex-col gap-2 p-2.5 text-left transition active:scale-[0.98] sm:p-3',
+              'glass focus-ring flex min-w-[76px] flex-1 basis-[76px] flex-col gap-2 p-2.5 text-left transition active:scale-[0.98] sm:min-w-[92px] sm:basis-[92px] sm:p-3',
               isActive && 'border-cyan-300/50 ring-1 ring-cyan-300/30',
               hasAlert && !isActive && 'border-brand-red/40',
             )}
@@ -55,23 +63,31 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
             <div className="flex items-center justify-between">
               <span className="label-xs">C{i + 1}</span>
               {hasAlert ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-brand-red animate-pulseSoft" />
+                <span
+                  className="h-2 w-2 rounded-full bg-brand-red animate-pulseSoft motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 <span
-                  className="h-1.5 w-1.5 rounded-full"
+                  className="h-2 w-2 rounded-full"
                   style={{ backgroundColor: color }}
+                  aria-hidden="true"
                 />
               )}
             </div>
 
             <span className="num font-mono text-base leading-none text-white sm:text-lg">
               {fmt(v, 2)}
-              <span className="ml-0.5 text-[10px] text-white/40">V</span>
+              <span className="ml-0.5 text-[10px] text-white/55">V</span>
             </span>
 
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+              role="img"
+              aria-label={`Cell ${i + 1} charge within ${VOLT_USABLE.min.toFixed(1)} to ${VOLT_USABLE.max.toFixed(1)} volts: ${Math.round(pct)} percent`}
+            >
               <div
-                className="h-full rounded-full transition-[width] duration-500 ease-out"
+                className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
                 style={{
                   width: `${pct}%`,
                   backgroundColor: color,
@@ -80,7 +96,7 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
               />
             </div>
 
-            <span className="font-mono text-[9px] text-white/30">
+            <span className="font-mono text-[9px] text-white/45">
               {VOLT_USABLE.min.toFixed(1)}-{VOLT_USABLE.max.toFixed(1)}V
             </span>
           </button>
