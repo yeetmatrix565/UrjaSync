@@ -54,7 +54,14 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # The action's default `packages` is "tools platform-tools", but the legacy
+      # "tools" package has been removed from Google's repository - sdkmanager
+      # fails with "Failed to find package 'tools'" and the step dies before
+      # Gradle ever runs. Install exactly what this build needs instead; these IDs
+      # are what `sdkmanager --list_installed` reports on the dev machine.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
 
       - run: chmod +x gradlew
