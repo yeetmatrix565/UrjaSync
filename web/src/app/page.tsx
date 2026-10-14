@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { CardGrid } from '@/components/dashboard/CardGrid';
+import { ConnectPrompt } from '@/components/dashboard/ConnectPrompt';
 import { HeadlineStats } from '@/components/dashboard/HeadlineStats';
 import { MetricCard, type MetricCardProps } from '@/components/dashboard/MetricCard';
 import { PackHero } from '@/components/dashboard/PackHero';
@@ -39,8 +40,20 @@ function temperatureStatus(tempC: number | null): MetricStatus {
 }
 
 export default function DashboardPage() {
-  const { latest, metrics, energy, snapshot, status, mapping, alerts, history, error, loading } =
-    useTelemetryContext();
+  const {
+    latest,
+    metrics,
+    energy,
+    snapshot,
+    status,
+    mapping,
+    alerts,
+    history,
+    error,
+    loading,
+    hasCredentials,
+    isDemo,
+  } = useTelemetryContext();
 
   const [dismissedSig, setDismissedSig] = useState<string | null>(null);
 
@@ -189,6 +202,10 @@ export default function DashboardPage() {
   // rather than padded with zeros, and an absent one disappears.
   const visible = loading ? cards : cards.filter((card) => card.available);
 
+  // No channel and no explicit scenario means there is genuinely nothing to
+  // show, so the grid gives way to a prompt rather than an empty screen.
+  const notConfigured = !loading && !hasCredentials && !isDemo;
+
   return (
     <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
       <AlertBanner
@@ -215,26 +232,35 @@ export default function DashboardPage() {
         <div className="mb-2 flex items-center justify-between">
           <h2 className="label-xs">Analysis</h2>
           <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
-            {loading ? 'loading…' : `${visible.length} of ${cards.length} available`}
+            {notConfigured
+              ? 'not connected'
+              : loading
+                ? 'loading…'
+                : `${visible.length} of ${cards.length} available`}
           </span>
         </div>
-        <CardGrid>
-          {visible.map((card) => (
-            <MetricCard
-              key={card.href}
-              title={card.title}
-              href={card.href}
-              icon={card.icon}
-              value={card.value}
-              unit={card.unit}
-              hint={card.hint}
-              spark={card.spark}
-              sparkColor={card.sparkColor}
-              source={card.source}
-              status={card.status}
-            />
-          ))}
-        </CardGrid>
+
+        {notConfigured ? (
+          <ConnectPrompt />
+        ) : (
+          <CardGrid>
+            {visible.map((card) => (
+              <MetricCard
+                key={card.href}
+                title={card.title}
+                href={card.href}
+                icon={card.icon}
+                value={card.value}
+                unit={card.unit}
+                hint={card.hint}
+                spark={card.spark}
+                sparkColor={card.sparkColor}
+                source={card.source}
+                status={card.status}
+              />
+            ))}
+          </CardGrid>
+        )}
       </section>
 
       <p className="mt-4 font-mono text-[9px] leading-relaxed text-white/25">

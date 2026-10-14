@@ -84,11 +84,22 @@ export async function fetchTelemetry(
   credentials: ChannelCredentials | null,
   options: FetchOptions = {},
 ): Promise<TelemetryFetchResult> {
+  // The `?scenario=` override is the only way to get synthetic data, and it has
+  // to be asked for explicitly. Nothing falls back to it on its own.
   if (options.scenario) {
     return { ...interpret(buildMockRaw(options.scenario), options.mapping), demo: true };
   }
+
+  // No channel configured: report no readings rather than inventing them. The UI
+  // prompts for a channel instead, so the app never shows numbers that could be
+  // mistaken for this pack's real measurements.
   if (!credentials) {
-    return { ...interpret(buildMockRaw('normal'), options.mapping), demo: true };
+    return {
+      response: EMPTY_RESPONSE,
+      demo: false,
+      mapping: options.mapping ?? detectMapping([]),
+      inferred: false,
+    };
   }
 
   const controller = new AbortController();

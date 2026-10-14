@@ -12,7 +12,7 @@ import { formatDuration } from '@/lib/telemetry/derive';
  * everything deeper lives behind a card.
  */
 export function SummaryBar() {
-  const { status, lastFetchedAt, loading, latest, isDemo, metrics, now, refresh } =
+  const { status, lastFetchedAt, loading, latest, isDemo, metrics, now, refresh, hasCredentials } =
     useTelemetryContext();
 
   const agoLabel = lastFetchedAt ? relTime(now - lastFetchedAt) : '—';
@@ -33,7 +33,18 @@ export function SummaryBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <StatusPill status={status} onRefresh={refresh} loading={loading && !latest} />
+          {/* Until the first poll settles we cannot know whether a channel is
+              configured, so the pill stays neutral rather than claiming either. */}
+          {loading || hasCredentials ? (
+            <StatusPill status={status} onRefresh={refresh} loading={loading && !latest} />
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 ring-1 ring-inset ring-white/15">
+              <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+              <span className="font-mono text-[11px] font-medium tracking-widest text-white/50">
+                NO CHANNEL
+              </span>
+            </span>
+          )}
           <SettingsButton connected={latest !== null} />
         </div>
       </div>
