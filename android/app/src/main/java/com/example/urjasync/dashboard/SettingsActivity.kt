@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.method.PasswordTransformationMethod
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -21,11 +23,20 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Block screenshots and the recent-apps thumbnail: this screen holds
+        // the ThingSpeak read key in plain text while it is being typed.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
         setContentView(R.layout.activity_settings)
 
         store = SecureStore(this)
         channelId = findViewById(R.id.channel_id)
         readApiKey = findViewById(R.id.read_api_key)
+        // Belt-and-braces with the layout's textPassword inputType: the key
+        // must stay masked even if the layout is edited later.
+        readApiKey.transformationMethod = PasswordTransformationMethod.getInstance()
 
         store.read()?.let { saved ->
             channelId.setText(saved.channelId)

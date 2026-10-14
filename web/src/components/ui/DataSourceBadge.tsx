@@ -27,7 +27,7 @@ const STYLES: Record<DataSource, { label: string; className: string; title: stri
   },
   UNAVAILABLE: {
     label: 'not published',
-    className: 'border-white/15 bg-white/5 text-white/40',
+    className: 'border-white/15 bg-white/5 text-white/60',
     title: 'This channel does not publish this metric',
   },
 };
@@ -44,7 +44,7 @@ export function DataSourceBadge({
     <span
       title={style.title}
       className={cx(
-        'rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest',
+        'shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-widest',
         style.className,
         className,
       )}

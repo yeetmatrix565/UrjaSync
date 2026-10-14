@@ -22,9 +22,15 @@ export default function HealthPage() {
 
   if (!hasSoc && !hasSoh) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
-        <PageHeader title="Cell health" subtitle="This channel publishes no SOC or SOH field." />
-        <div className="mt-4">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+      >
+        <PageHeader
+          title="Cell health"
+          subtitle="This channel publishes no SOC or SOH field."
+        />
+        <div className="mt-5">
           <EmptyState
             title="no health data"
             detail="State of charge and state of health are reported by the firmware. This channel does not publish either, and the app will not estimate them from other values."
@@ -38,40 +44,51 @@ export default function HealthPage() {
   const sohLow = snapshot.soh !== null && snapshot.soh < ADVISORY_THRESHOLDS.sohEndOfLife;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <PageHeader
         title="Cell health"
-        subtitle={latest ? `${localTime(latest.timestamp)} · as reported by the BMS` : undefined}
+        subtitle={
+          latest ? `${localTime(latest.timestamp)} · as reported by the BMS` : undefined
+        }
         source="LIVE"
       />
 
-      <section className="glass mt-4 grid grid-cols-2 gap-3 p-3.5">
+      <section className="glass mt-5 grid grid-cols-2 gap-3 p-4 sm:gap-4 sm:p-5">
         <div>
-          <p className="label-xs mb-1">State of charge</p>
-          <p className="num text-3xl font-medium leading-none text-emerald-300">
+          <h2 className="label-xs mb-1">State of charge</h2>
+          <p className="num text-4xl font-semibold leading-none tracking-tight sm:text-[2.75rem] text-emerald-300">
             {fmtInt(snapshot.soc)}
-            <span className="ml-1 font-mono text-xs text-white/40">%</span>
+            <span className="ml-1 font-mono text-sm text-white/55">%</span>
           </p>
-          <p className="mt-1 font-mono text-[10px] text-white/40">
-            {socLow ? `below advisory ${ADVISORY_THRESHOLDS.socLow}%` : 'above advisory reserve'}
+          <p className="mt-1.5 font-mono text-[11px] text-white/55">
+            {socLow
+              ? `below advisory ${ADVISORY_THRESHOLDS.socLow}%`
+              : 'above advisory reserve'}
           </p>
         </div>
         <div>
-          <p className="label-xs mb-1">State of health</p>
-          <p className="num text-3xl font-medium leading-none text-violet-300">
+          <h2 className="label-xs mb-1">State of health</h2>
+          <p className="num text-4xl font-semibold leading-none tracking-tight sm:text-[2.75rem] text-violet-300">
             {fmtInt(snapshot.soh)}
-            <span className="ml-1 font-mono text-xs text-white/40">%</span>
+            <span className="ml-1 font-mono text-sm text-white/55">%</span>
           </p>
-          <p className="mt-1 font-mono text-[10px] text-white/40">
+          <p className="mt-1.5 font-mono text-[11px] text-white/55">
             {sohLow ? 'at advisory end of life' : 'above advisory end of life'}
           </p>
         </div>
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">Over the window</p>
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">Over the window</h2>
         {hasSoc ? (
-          <StatRow label="SOC average" value={fmt(metrics.soc.summary.mean, 1)} unit="%" />
+          <StatRow
+            label="SOC average"
+            value={fmt(metrics.soc.summary.mean, 1)}
+            unit="%"
+          />
         ) : null}
         {hasSoc ? (
           <StatRow
@@ -82,7 +99,11 @@ export default function HealthPage() {
           />
         ) : null}
         {hasSoh ? (
-          <StatRow label="SOH average" value={fmt(metrics.soh.summary.mean, 1)} unit="%" />
+          <StatRow
+            label="SOH average"
+            value={fmt(metrics.soh.summary.mean, 1)}
+            unit="%"
+          />
         ) : null}
         {hasSoh ? (
           <StatRow
@@ -94,37 +115,37 @@ export default function HealthPage() {
         ) : null}
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-2">Trend</p>
-        <div className="h-52 w-full">
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-2">Trend</h2>
+        <div className="h-56 w-full sm:h-60">
           <TrendChart
             rows={rows}
             series={[
-              ...(hasSoc
-                ? [{ key: 'soc', name: 'SOC %', color: '#30d158' }]
-                : []),
-              ...(hasSoh
-                ? [{ key: 'soh', name: 'SOH %', color: '#8b5cf6' }]
-                : []),
+              ...(hasSoc ? [{ key: 'soc', name: 'SOC %', color: '#30d158' }] : []),
+              ...(hasSoh ? [{ key: 'soh', name: 'SOH %', color: '#8b5cf6' }] : []),
             ]}
             unit="%"
+            ariaLabel="State of charge and health over the window"
           />
         </div>
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">About the advisory limits</p>
-        <p className="text-[11px] leading-relaxed text-white/50">
-          The {ADVISORY_THRESHOLDS.socLow}% SOC reserve and {ADVISORY_THRESHOLDS.sohEndOfLife}%
-          SOH end-of-life figures are{' '}
-          <span className="text-white/70">common industry practice, not firmware thresholds</span>{' '}
-          - unlike the cell, imbalance and temperature limits, which come from the BMS itself.
-          They are used only to colour this screen, never to raise alerts. The app does not
-          estimate remaining runtime or capacity: it has no measured capacity to divide by.
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">About the advisory limits</h2>
+        <p className="text-[13px] leading-relaxed text-white/65">
+          The {ADVISORY_THRESHOLDS.socLow}% SOC reserve and{' '}
+          {ADVISORY_THRESHOLDS.sohEndOfLife}% SOH end-of-life figures are{' '}
+          <span className="text-white/70">
+            common industry practice, not firmware thresholds
+          </span>{' '}
+          - unlike the cell, imbalance and temperature limits, which come from the BMS
+          itself. They are used only to colour this screen, never to raise alerts. The app
+          does not estimate remaining runtime or capacity: it has no measured capacity to
+          divide by.
         </p>
       </section>
 
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-5 space-y-3">
         <FormulaCard
           doc={FORMULAS.packVoltage}
           inputs={[

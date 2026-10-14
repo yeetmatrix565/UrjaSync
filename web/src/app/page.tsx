@@ -207,7 +207,10 @@ export default function DashboardPage() {
   const notConfigured = !loading && !hasCredentials && !isDemo;
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-5xl space-y-4 px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <AlertBanner
         alerts={alerts}
         visible={bannerVisible}
@@ -217,21 +220,31 @@ export default function DashboardPage() {
       <SummaryBar />
 
       {error ? (
-        <p className="mt-2 font-mono text-[10px] text-brand-amber/80">! {error}</p>
+        <p
+          className="font-mono text-[11px] leading-relaxed text-amber-200/90"
+          role="status"
+        >
+          ! {error}
+        </p>
       ) : null}
 
-      <section className="mt-3">
+      <section aria-label="Battery pack 3D view">
         <PackHero />
       </section>
 
-      <section className="mt-2.5">
+      <section aria-label="Headline readings">
         <HeadlineStats />
       </section>
 
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="label-xs">Analysis</h2>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
+      <section aria-labelledby="analysis-heading">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="analysis-heading" className="label-xs">
+            Analysis
+          </h2>
+          <span
+            className="font-mono text-[10px] uppercase tracking-widest text-white/50"
+            aria-live="polite"
+          >
             {notConfigured
               ? 'not connected'
               : loading
@@ -263,12 +276,12 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <p className="mt-4 font-mono text-[9px] leading-relaxed text-white/25">
+      <p className="font-mono text-[10px] leading-relaxed text-white/45">
         Cards without data from this channel are hidden rather than filled with zeros.
         Every value is labelled by origin: live, derived or simulated.
       </p>
 
-      <footer className="mt-6 text-center font-mono text-[9px] uppercase tracking-[0.3em] text-white/20">
+      <footer className="pt-2 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">
         {status} · Urja Sync
       </footer>
     </main>

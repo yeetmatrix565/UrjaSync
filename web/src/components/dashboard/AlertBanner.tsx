@@ -18,34 +18,40 @@ export function AlertBanner({ alerts, visible, onDismiss }: AlertBannerProps) {
     <div
       role="alert"
       className={cx(
-        'animate-slideDown glass mb-3 border-l-2 p-3',
-        critical ? 'border-l-brand-red shadow-glowRed' : 'border-l-brand-amber',
+        // No bottom margin: the dashboard <main> spaces children with space-y-4.
+        'glass border-l-4 p-3.5 motion-reduce:animate-none animate-slideDown sm:p-4',
+        critical
+          ? 'border-l-brand-red bg-brand-red/[0.06] shadow-glowRed'
+          : 'border-l-brand-amber bg-brand-amber/[0.05]',
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
           <span
             className={cx(
-              'mt-0.5 h-2 w-2 shrink-0 rounded-full',
-              critical ? 'bg-brand-red animate-pulseSoft' : 'bg-brand-amber',
+              'mt-1 h-2 w-2 shrink-0 rounded-full',
+              critical
+                ? 'bg-brand-red animate-pulseSoft motion-reduce:animate-none'
+                : 'bg-brand-amber',
             )}
+            aria-hidden="true"
           />
-          <div>
+          <div className="min-w-0">
             <p
               className={cx(
-                'font-mono text-[11px] font-medium uppercase tracking-[0.2em]',
-                critical ? 'text-brand-red' : 'text-brand-amber',
+                'font-mono text-[11px] font-semibold uppercase tracking-[0.2em]',
+                critical ? 'text-red-100' : 'text-amber-100',
               )}
             >
               {alerts.length} active alert{alerts.length > 1 ? 's' : ''}
             </p>
-            <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
               {alerts.map((a) => (
                 <li
                   key={a.code}
                   className={cx(
-                    'num font-mono text-[11px]',
-                    a.severity === 'critical' ? 'text-red-200' : 'text-amber-200',
+                    'num font-mono text-[11px] leading-relaxed',
+                    a.severity === 'critical' ? 'text-red-100' : 'text-amber-100',
                   )}
                 >
                   {a.message}
@@ -59,7 +65,7 @@ export function AlertBanner({ alerts, visible, onDismiss }: AlertBannerProps) {
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss alerts"
-          className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-white/50 transition hover:text-white/80"
+          className="focus-ring min-h-8 shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-white/70 transition hover:text-white active:scale-95"
         >
           dismiss
         </button>

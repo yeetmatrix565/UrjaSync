@@ -20,9 +20,12 @@ export default function CurrentPage() {
 
   if (!hasFinite(current.values)) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+      >
         <PageHeader title="Current" subtitle="This channel publishes no current field." />
-        <div className="mt-4">
+        <div className="mt-5">
           <EmptyState
             title="no current data"
             detail="Without a current measurement the app cannot derive power or energy for this channel."
@@ -40,7 +43,10 @@ export default function CurrentPage() {
   const charged = current.values.filter((v): v is number => v !== null && v < 0);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <PageHeader
         title="Current"
         subtitle={
@@ -49,13 +55,13 @@ export default function CurrentPage() {
         source="LIVE"
       />
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">Current now</p>
-        <p className="num text-3xl font-medium leading-none text-violet-300">
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">Current now</h2>
+        <p className="num text-4xl font-semibold leading-none tracking-tight sm:text-[2.75rem] text-violet-300">
           {fmt(now, 3)}
-          <span className="ml-1 font-mono text-xs text-white/40">A</span>
+          <span className="ml-1 font-mono text-sm text-white/55">A</span>
         </p>
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/40">
+        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-widest text-white/55">
           {direction}
         </p>
         <div className="mt-3">
@@ -70,30 +76,45 @@ export default function CurrentPage() {
             value={fmt(charged.length ? Math.min(...charged) : null, 3)}
             unit="A"
           />
-          <StatRow label="charge delivered" value={fmt(energy.dischargedAh, 3)} unit="Ah" emphasis />
-          <StatRow label="charge returned" value={fmt(energy.chargedAh, 3)} unit="Ah" emphasis />
+          <StatRow
+            label="charge delivered"
+            value={fmt(energy.dischargedAh, 3)}
+            unit="Ah"
+            emphasis
+          />
+          <StatRow
+            label="charge returned"
+            value={fmt(energy.chargedAh, 3)}
+            unit="Ah"
+            emphasis
+          />
         </div>
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-2">Current over the window</p>
-        <div className="h-52 w-full">
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-2">Current over the window</h2>
+        <div className="h-56 w-full sm:h-60">
           <TrendChart
             rows={rows}
             series={[{ key: 'currentA', name: 'A', color: '#a78bfa' }]}
             unit="A"
             zeroLine
+            ariaLabel="Current over the window"
           />
         </div>
       </section>
 
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-5 space-y-3">
         <FormulaCard
           doc={FORMULAS.charge}
           inputs={[
             { label: 'delivered', value: fmt(energy.dischargedAh, 3), unit: 'Ah' },
             { label: 'returned', value: fmt(energy.chargedAh, 3), unit: 'Ah' },
-            { label: 'integrated window', value: fmt(energy.durationMs / 60000, 1), unit: 'min' },
+            {
+              label: 'integrated window',
+              value: fmt(energy.durationMs / 60000, 1),
+              unit: 'min',
+            },
           ]}
         />
         <FormulaCard

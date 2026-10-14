@@ -18,8 +18,10 @@ import {
   CELL_RADIUS,
   CORE_RADIUS,
   PALETTE,
+  PBR,
   cellPositions,
   createDustField,
+  createProceduralEnvironment,
   createSocRingMaterial,
   fitRadius,
   getGlowTexture,
@@ -47,18 +49,25 @@ const ROTATE_RESUME_MS = 3500;
 /** The cable loop was authored for a three-cell pack; scale it from that. */
 const REFERENCE_PACK_WIDTH = 2.6;
 
-const METAL = {
-  color: PALETTE.metal,
-  metalness: 0.85,
-  roughness: 0.3,
-  transparent: true,
-  opacity: 0.52,
-} as const;
+/** Gentle idle bob amplitude (world units) — subtle, never nauseating. */
+const BOB_AMPLITUDE = 0.045;
+
+/** Mouse parallax clamp (radians) — a nudge, not a swing. */
+const PARALLAX_MAX_Y = 0.06;
+const PARALLAX_MAX_X = 0.04;
+
+/** Soft fake contact shadow: cheaper than a shadow map, same grounding. */
+const CONTACT_SHADOW_OPACITY = 0.55;
 
 /**
  * "The Pack": enclosure, cells, rings and cable, driven imperatively from
  * `useFrame` straight off the lerped telemetry ref - no per-frame React work.
  * Everything is sized from `cellCount`, so a 2S pack looks like a 2S pack.
+ *
+ * Perf notes: geometries/materials for the enclosure, shells, caps and cable
+ * are created once and shared across cells; only the per-cell emissive cores
+ * and glow sprites keep individual materials (their colour is animated per
+ * cell). The frame loop allocates nothing — every temp lives in a ref.
  */
 export function Pack({
   valuesRef,
@@ -70,6 +79,7 @@ export function Pack({
   reducedMotion,
 }: PackProps) {
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const rigRef = useRef<THREE.Group>(null);
   const coreRefs = useRef<(THREE.Mesh | null)[]>([]);
   const glowRefs = useRef<(THREE.Sprite | null)[]>([]);
   const sohRef = useRef<THREE.Mesh>(null);
@@ -90,8 +100,33 @@ export function Pack({
   const socRing = useMemo(() => createSocRingMaterial(), []);
   const stream = useMemo(() => createParticleStream(undefined, cableScale), [cableScale]);
   const cableGeo = useMemo(() => createCableGeometry(cableScale), [cableScale]);
-  const dustGeo = useMemo(() => createDustField(220), []);
+  // Restraint: fewer, softer dust motes than before — atmosphere, not snow.
+  const dustGeo = useMemo(() => createDustField(90), []);
   const glowTex = useMemo(() => getGlowTexture(), []);
+
+  // Shared geometry/materials: one instance each, reused by every cell/panel.
+  const shellGeo = useMemo(
+    () => new THREE.CylinderGeometry(CELL_RADIUS, CELL_RADIUS, CELL_HEIGHT, 24, 1, true),
+    [],
+  );
+  const capGeo = useMemo(
+    () => new THREE.CylinderGeometry(CELL_RADIUS + 0.004, CELL_RADIUS + 0.004, 0.08, 24),
+    [],
+  );
+  const coreGeo = useMemo(
+    () => new THREE.CylinderGeometry(CORE_RADIUS, CORE_RADIUS, CELL_HEIGHT * 0.86, 16),
+    [],
+  );
+  const enclosureMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ ...PBR.enclosure, side: THREE.DoubleSide }),
+    [],
+  );
+  const shellMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ ...PBR.cellShell, side: THREE.DoubleSide }),
+    [],
+  );
+  const capMat = useMemo(() => new THREE.MeshStandardMaterial(PBR.cellCap), []);
+  const cableMat = useMemo(() => new THREE.MeshStandardMaterial(PBR.cable), []);
 
   const tmpColor = useMemo(() => new THREE.Color(), []);
   const focusTarget = useMemo(() => new THREE.Vector3(), []);
@@ -99,11 +134,26 @@ export function Pack({
   const alertColor = useMemo(() => new THREE.Color(PALETTE.red), []);
   const calmColor = useMemo(() => new THREE.Color(PALETTE.cyan), []);
 
-  const { camera, size } = useThree();
+  const { camera, size, gl, scene } = useThree();
 
   useEffect(() => {
     setAutoRotate(!reducedMotion);
   }, [reducedMotion]);
+
+  // Procedural studio reflections (PMREM from a RoomEnvironment — no network
+  // fetch, no HDR file). Restores the previous environment on unmount.
+  useEffect(() => {
+    const prevEnv = scene.environment;
+    const prevIntensity = scene.environmentIntensity;
+    const env = createProceduralEnvironment(gl);
+    scene.environment = env.texture;
+    scene.environmentIntensity = 0.5;
+    return () => {
+      scene.environment = prevEnv;
+      scene.environmentIntensity = prevIntensity;
+      env.dispose();
+    };
+  }, [gl, scene]);
 
   // Frame the pack by whichever axis is tighter, and pull back for wide packs.
   // The phone app runs full-screen (taller than a browser viewport), so a fixed
@@ -140,14 +190,52 @@ export function Pack({
       socRing.material.dispose();
       cableGeo.dispose();
       dustGeo.dispose();
+      shellGeo.dispose();
+      capGeo.dispose();
+      coreGeo.dispose();
+      enclosureMat.dispose();
+      shellMat.dispose();
+      capMat.dispose();
+      cableMat.dispose();
     },
-    [stream, socRing, cableGeo, dustGeo],
+    [
+      stream,
+      socRing,
+      cableGeo,
+      dustGeo,
+      shellGeo,
+      capGeo,
+      coreGeo,
+      enclosureMat,
+      shellMat,
+      capMat,
+      cableMat,
+    ],
   );
 
   useFrame((state, delta) => {
     const dt = Math.min(0.05, delta);
     const t = state.clock.elapsedTime;
     const v = valuesRef.current;
+
+    // Idle float + mouse parallax: gentle, clamped, and fully off under
+    // reduced-motion (the rig eases back to neutral instead of snapping).
+    const rig = rigRef.current;
+    if (rig) {
+      if (reducedMotion) {
+        rig.position.y += (0 - rig.position.y) * 0.1;
+        rig.rotation.x += (0 - rig.rotation.x) * 0.1;
+        rig.rotation.y += (0 - rig.rotation.y) * 0.1;
+        rig.rotation.z = 0;
+      } else {
+        rig.position.y = Math.sin(t * 0.8) * BOB_AMPLITUDE;
+        rig.rotation.z = Math.sin(t * 0.5) * 0.008;
+        const px = THREE.MathUtils.clamp(state.pointer.x, -1, 1);
+        const py = THREE.MathUtils.clamp(state.pointer.y, -1, 1);
+        rig.rotation.y += (px * PARALLAX_MAX_Y - rig.rotation.y) * 0.04;
+        rig.rotation.x += (-py * PARALLAX_MAX_X - rig.rotation.x) * 0.04;
+      }
+    }
 
     for (let i = 0; i < positions.length; i++) {
       const hasAlert = cellAlerts[i] === true;
@@ -205,7 +293,7 @@ export function Pack({
     stream.update(dt, v.currentA, reducedMotion, t);
 
     if (dustRef.current && !reducedMotion) {
-      dustRef.current.rotation.y = t * 0.02;
+      dustRef.current.rotation.y = t * 0.012;
     }
 
     const rim = rimRef.current;
@@ -227,15 +315,24 @@ export function Pack({
   });
 
   const { width: W, height: H, depth: D, wall } = dims;
+  const selectedX = selectedCell !== null ? positions[selectedCell] : undefined;
 
   return (
     <>
       <color attach="background" args={[PALETTE.bg]} />
       <fog attach="fog" args={[PALETTE.bg, 9, 20]} />
 
-      <ambientLight intensity={0.45} />
-      <directionalLight position={[4, 6, 5]} intensity={1.0} color="#cfe9ff" />
+      {/* Key / fill / rim / accent — env map (see effect above) does the rest. */}
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[4, 6, 5]} intensity={1.6} color="#d6ecff" />
+      <directionalLight position={[-5, 2, -2]} intensity={0.55} color="#38bdf8" />
       <pointLight ref={rimRef} position={[0, 0.5, -3.4]} intensity={1.9} distance={13} />
+      <pointLight
+        position={[0, 2.6, 2.6]}
+        intensity={0.5}
+        color="#a78bfa"
+        distance={10}
+      />
 
       <Grid
         position={[0, -1.64, 0]}
@@ -251,172 +348,171 @@ export function Pack({
         infiniteGrid
       />
 
-      {/* Enclosure - 5-panel cutaway, front left open */}
-      <group>
-        <mesh position={[0, 0, -D / 2]}>
-          <boxGeometry args={[W, H, wall]} />
-          <meshStandardMaterial {...METAL} />
-        </mesh>
-        <mesh position={[0, -H / 2, 0]}>
-          <boxGeometry args={[W, wall, D]} />
-          <meshStandardMaterial {...METAL} />
-        </mesh>
-        <mesh position={[0, H / 2, 0]}>
-          <boxGeometry args={[W, wall, D]} />
-          <meshStandardMaterial {...METAL} />
-        </mesh>
-        <mesh position={[-W / 2, 0, 0]}>
-          <boxGeometry args={[wall, H, D]} />
-          <meshStandardMaterial {...METAL} />
-        </mesh>
-        <mesh position={[W / 2, 0, 0]}>
-          <boxGeometry args={[wall, H, D]} />
-          <meshStandardMaterial {...METAL} />
-        </mesh>
-      </group>
-
-      {/* Cells - one per published cell voltage */}
-      {positions.map((x, i) => (
-        <group key={i} position={[x, 0, 0]}>
-          <mesh
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectCell(i);
-            }}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              document.body.style.cursor = 'pointer';
-            }}
-            onPointerOut={() => {
-              document.body.style.cursor = 'auto';
-            }}
-          >
-            <cylinderGeometry
-              args={[CELL_RADIUS, CELL_RADIUS, CELL_HEIGHT, 24, 1, true]}
-            />
-            <meshStandardMaterial
-              color={PALETTE.metalEdge}
-              metalness={0.92}
-              roughness={0.26}
-              side={THREE.DoubleSide}
-              transparent
-              opacity={0.42}
-            />
-          </mesh>
-
-          <mesh position={[0, CELL_HEIGHT / 2, 0]}>
-            <cylinderGeometry
-              args={[CELL_RADIUS + 0.004, CELL_RADIUS + 0.004, 0.08, 24]}
-            />
-            <meshStandardMaterial
-              color={PALETTE.metalEdge}
-              metalness={0.95}
-              roughness={0.35}
-            />
-          </mesh>
-          <mesh position={[0, -CELL_HEIGHT / 2, 0]}>
-            <cylinderGeometry
-              args={[CELL_RADIUS + 0.004, CELL_RADIUS + 0.004, 0.08, 24]}
-            />
-            <meshStandardMaterial
-              color={PALETTE.metalEdge}
-              metalness={0.95}
-              roughness={0.35}
-            />
-          </mesh>
-
-          <mesh
-            ref={(el) => {
-              coreRefs.current[i] = el;
-            }}
-          >
-            <cylinderGeometry args={[CORE_RADIUS, CORE_RADIUS, CELL_HEIGHT * 0.86, 16]} />
-            <meshStandardMaterial
-              color="#000000"
-              emissive={PALETTE.green}
-              emissiveIntensity={1}
-              toneMapped={false}
-            />
-          </mesh>
-
-          <sprite
-            ref={(el) => {
-              glowRefs.current[i] = el;
-            }}
-          >
-            <spriteMaterial
-              map={glowTex}
-              transparent
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-              toneMapped={false}
-            />
-          </sprite>
-
-          <CellLabel
-            index={i}
-            valuesRef={valuesRef}
-            position={[0, CELL_HEIGHT / 2 + 0.62, 0]}
-          />
-        </group>
-      ))}
-
-      {/* Cable loop + current particles */}
-      <mesh geometry={cableGeo}>
-        <meshStandardMaterial
-          color="#0d1b22"
-          emissive={PALETTE.cyan}
-          emissiveIntensity={0.22}
-          metalness={0.6}
-          roughness={0.42}
+      {/* Soft fake contact shadow — grounds the pack with no shadow-map cost. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.63, 0]}>
+        <planeGeometry args={[W * 1.5, 4.4]} />
+        <meshBasicMaterial
+          map={glowTex}
+          color="#000000"
+          transparent
+          opacity={CONTACT_SHADOW_OPACITY}
+          depthWrite={false}
         />
       </mesh>
-      <primitive object={stream.mesh} />
 
-      {/* SOC hologram ring */}
-      <mesh
-        ref={ringRef}
-        rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-        position={[0, -0.02, 0]}
-      >
-        <torusGeometry args={[ringRadius, 0.05, 16, 160]} />
-        <primitive object={socRing.material} attach="material" />
-      </mesh>
+      {/* Floating rig: enclosure, cells, cable, rings. Grid/shadow stay put. */}
+      <group ref={rigRef}>
+        {/* Enclosure - 5-panel cutaway, front left open */}
+        <group>
+          <mesh position={[0, 0, -D / 2]} material={enclosureMat}>
+            <boxGeometry args={[W, H, wall]} />
+          </mesh>
+          <mesh position={[0, -H / 2, 0]} material={enclosureMat}>
+            <boxGeometry args={[W, wall, D]} />
+          </mesh>
+          <mesh position={[0, H / 2, 0]} material={enclosureMat}>
+            <boxGeometry args={[W, wall, D]} />
+          </mesh>
+          <mesh position={[-W / 2, 0, 0]} material={enclosureMat}>
+            <boxGeometry args={[wall, H, D]} />
+          </mesh>
+          <mesh position={[W / 2, 0, 0]} material={enclosureMat}>
+            <boxGeometry args={[wall, H, D]} />
+          </mesh>
+        </group>
 
-      {/* SOH crystal */}
-      <group ref={sohGroupRef} position={sohAt}>
-        <mesh ref={sohRef}>
-          <octahedronGeometry args={[0.32, 0]} />
-          <meshStandardMaterial
-            color="#08202a"
-            emissive={PALETTE.cyan}
-            emissiveIntensity={1}
-            metalness={0.25}
-            roughness={0.12}
-            transparent
-            opacity={0.7}
-            toneMapped={false}
-          />
+        {/* Cells - one per published cell voltage */}
+        {positions.map((x, i) => (
+          <group key={i} position={[x, 0, 0]}>
+            <mesh
+              geometry={shellGeo}
+              material={shellMat}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectCell(i);
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                document.body.style.cursor = 'pointer';
+              }}
+              onPointerOut={() => {
+                document.body.style.cursor = 'auto';
+              }}
+            />
+
+            <mesh
+              geometry={capGeo}
+              material={capMat}
+              position={[0, CELL_HEIGHT / 2, 0]}
+            />
+            <mesh
+              geometry={capGeo}
+              material={capMat}
+              position={[0, -CELL_HEIGHT / 2, 0]}
+            />
+
+            <mesh
+              geometry={coreGeo}
+              ref={(el) => {
+                coreRefs.current[i] = el;
+              }}
+            >
+              <meshStandardMaterial
+                color="#000000"
+                emissive={PALETTE.green}
+                emissiveIntensity={1}
+                toneMapped={false}
+              />
+            </mesh>
+
+            <sprite
+              ref={(el) => {
+                glowRefs.current[i] = el;
+              }}
+            >
+              <spriteMaterial
+                map={glowTex}
+                transparent
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                toneMapped={false}
+              />
+            </sprite>
+
+            <CellLabel
+              index={i}
+              valuesRef={valuesRef}
+              position={[0, CELL_HEIGHT / 2 + 0.62, 0]}
+              selected={selectedCell === i}
+            />
+          </group>
+        ))}
+
+        {/* Cable loop + current particles */}
+        <mesh geometry={cableGeo} material={cableMat} />
+        <primitive object={stream.mesh} />
+
+        {/* SOC hologram ring */}
+        <mesh
+          ref={ringRef}
+          rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+          position={[0, -0.02, 0]}
+        >
+          <torusGeometry args={[ringRadius, 0.05, 16, 160]} />
+          <primitive object={socRing.material} attach="material" />
         </mesh>
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.48, 0.01, 8, 64]} />
-          <meshBasicMaterial
-            color={PALETTE.cyan}
-            transparent
-            opacity={0.32}
-            toneMapped={false}
-          />
-        </mesh>
+
+        {/* SOH crystal */}
+        <group ref={sohGroupRef} position={sohAt}>
+          <mesh ref={sohRef}>
+            <octahedronGeometry args={[0.32, 0]} />
+            <meshStandardMaterial
+              color="#08202a"
+              emissive={PALETTE.cyan}
+              emissiveIntensity={1}
+              metalness={0.25}
+              roughness={0.12}
+              transparent
+              opacity={0.7}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.48, 0.01, 8, 64]} />
+            <meshBasicMaterial
+              color={PALETTE.cyan}
+              transparent
+              opacity={0.32}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+
+        {/* Selected-cell highlight ring */}
+        {selectedX !== undefined && (
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[selectedX, -CELL_HEIGHT / 2 - 0.12, 0]}
+          >
+            <torusGeometry args={[CELL_RADIUS + 0.12, 0.02, 8, 48]} />
+            <meshBasicMaterial
+              color={PALETTE.cyan}
+              transparent
+              opacity={0.9}
+              toneMapped={false}
+            />
+          </mesh>
+        )}
       </group>
 
-      {/* Ambient dust */}
+      {/* Ambient dust — restrained: fewer, softer, slower than before. */}
       <points ref={dustRef} geometry={dustGeo}>
         <pointsMaterial
           map={glowTex}
-          size={0.07}
+          size={0.055}
           sizeAttenuation
           transparent
-          opacity={0.32}
+          opacity={0.22}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           color={PALETTE.cyan}
@@ -428,14 +524,16 @@ export function Pack({
         ref={controlsRef}
         makeDefault
         autoRotate={!reducedMotion && autoRotate}
-        autoRotateSpeed={0.65}
+        autoRotateSpeed={0.6}
+        rotateSpeed={0.85}
+        zoomSpeed={0.85}
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
         minDistance={4.4}
         maxDistance={14}
-        minPolarAngle={0.75}
-        maxPolarAngle={2.25}
+        minPolarAngle={0.55}
+        maxPolarAngle={2.4}
         onStart={() => {
           if (resumeTimer.current) clearTimeout(resumeTimer.current);
           setAutoRotate(false);

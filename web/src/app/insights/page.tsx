@@ -29,8 +29,10 @@ function AlertRow({ alert }: { alert: Alert }) {
   const critical = alert.severity === 'critical';
   return (
     <div
-      className={`flex items-start justify-between gap-3 border-l-2 py-2 pl-2.5 ${
-        critical ? 'border-l-brand-red bg-brand-red/5' : 'border-l-brand-amber bg-brand-amber/5'
+      className={`flex items-start justify-between gap-3 rounded-r-lg border-l-2 py-2.5 pl-3 pr-2 ${
+        critical
+          ? 'border-l-brand-red bg-brand-red/5'
+          : 'border-l-brand-amber bg-brand-amber/5'
       }`}
     >
       <div>
@@ -41,9 +43,11 @@ function AlertRow({ alert }: { alert: Alert }) {
         >
           {alert.message}
         </p>
-        <p className="mt-0.5 font-mono text-[10px] text-white/40">{ruleFor(alert.code)}</p>
+        <p className="mt-0.5 font-mono text-[10px] text-white/55">
+          {ruleFor(alert.code)}
+        </p>
       </div>
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-white/30">
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-white/50">
         {alert.severity}
       </span>
     </div>
@@ -57,14 +61,33 @@ export default function InsightsPage() {
   const imbalance = metrics.imbalanceV;
 
   const evaluated = [
-    { label: 'High temperature', rule: `temp > ${ALERT_THRESHOLDS.tempWarn} °C`, fired: alerts.some((a) => a.code === 'HIGH_TEMP') },
-    { label: 'Cell overvoltage', rule: `cell > ${ALERT_THRESHOLDS.cellOvervoltage} V`, fired: alerts.some((a) => a.code.startsWith('OVERVOLTAGE')) },
-    { label: 'Cell undervoltage', rule: `cell < ${ALERT_THRESHOLDS.cellUndervoltage} V`, fired: alerts.some((a) => a.code.startsWith('UNDERVOLTAGE')) },
-    { label: 'Cell imbalance', rule: `spread > ${ALERT_THRESHOLDS.cellImbalance} V`, fired: alerts.some((a) => a.code === 'CELL_IMBALANCE') },
+    {
+      label: 'High temperature',
+      rule: `temp > ${ALERT_THRESHOLDS.tempWarn} °C`,
+      fired: alerts.some((a) => a.code === 'HIGH_TEMP'),
+    },
+    {
+      label: 'Cell overvoltage',
+      rule: `cell > ${ALERT_THRESHOLDS.cellOvervoltage} V`,
+      fired: alerts.some((a) => a.code.startsWith('OVERVOLTAGE')),
+    },
+    {
+      label: 'Cell undervoltage',
+      rule: `cell < ${ALERT_THRESHOLDS.cellUndervoltage} V`,
+      fired: alerts.some((a) => a.code.startsWith('UNDERVOLTAGE')),
+    },
+    {
+      label: 'Cell imbalance',
+      rule: `spread > ${ALERT_THRESHOLDS.cellImbalance} V`,
+      fired: alerts.some((a) => a.code === 'CELL_IMBALANCE'),
+    },
   ];
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <PageHeader
         title="System insights"
         subtitle={
@@ -75,10 +98,10 @@ export default function InsightsPage() {
         source="DERIVED"
       />
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-2">
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-2">
           {alerts.length > 0 ? `${alerts.length} active` : 'No active alerts'}
-        </p>
+        </h2>
         {alerts.length > 0 ? (
           <div className="space-y-1">
             {alerts.map((alert) => (
@@ -86,14 +109,14 @@ export default function InsightsPage() {
             ))}
           </div>
         ) : (
-          <p className="font-mono text-[11px] text-white/40">
+          <p className="text-[13px] text-white/65">
             Every rule below is currently satisfied.
           </p>
         )}
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">Rules evaluated</p>
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">Rules evaluated</h2>
         {evaluated.map((rule) => (
           <StatRow
             key={rule.label}
@@ -105,13 +128,14 @@ export default function InsightsPage() {
       </section>
 
       {imbalance.summary.count > 0 ? (
-        <section className="glass mt-4 p-3.5">
-          <p className="label-xs mb-2">Imbalance over the window</p>
-          <div className="h-44 w-full">
+        <section className="glass mt-5 p-4 sm:p-5">
+          <h2 className="label-xs mb-2">Imbalance over the window</h2>
+          <div className="h-48 w-full sm:h-56">
             <TrendChart
               rows={rows}
               series={[{ key: 'imbalanceV', name: 'V', color: '#f5a524' }]}
               unit="V"
+              ariaLabel="Cell imbalance over the window"
             />
           </div>
           <div className="mt-2">
@@ -120,7 +144,7 @@ export default function InsightsPage() {
           </div>
         </section>
       ) : (
-        <div className="mt-4">
+        <div className="mt-5">
           <EmptyState
             title="no imbalance history"
             detail="Imbalance needs at least two measured cells, and this channel has not published two."
@@ -128,16 +152,24 @@ export default function InsightsPage() {
         </div>
       )}
 
-      <section className="mt-4">
+      <section className="mt-5">
         <EventFeed history={history} />
       </section>
 
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-5 space-y-3">
         <FormulaCard
           doc={FORMULAS.cellImbalance}
           inputs={[
-            { label: 'current imbalance', value: fmt(imbalance.summary.last, 4), unit: 'V' },
-            { label: 'threshold', value: String(ALERT_THRESHOLDS.cellImbalance), unit: 'V' },
+            {
+              label: 'current imbalance',
+              value: fmt(imbalance.summary.last, 4),
+              unit: 'V',
+            },
+            {
+              label: 'threshold',
+              value: String(ALERT_THRESHOLDS.cellImbalance),
+              unit: 'V',
+            },
           ]}
         />
         <FormulaCard

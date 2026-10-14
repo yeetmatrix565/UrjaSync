@@ -130,6 +130,9 @@ export default function BatteryScene({
         <Canvas
           frameloop={active ? 'always' : 'never'}
           dpr={[1, isSmall ? DPR_MOBILE : DPR_DESKTOP]}
+          // Adaptive quality: if the GPU cannot hold the frame rate, R3F
+          // lowers the DPR toward 0.5 instead of dropping frames.
+          performance={{ min: 0.5, max: 1, debounce: 200 }}
           gl={{ antialias: true, powerPreference: 'high-performance', alpha: false }}
           camera={{ position: [0, 1.7, 6.6], fov: 40, near: 0.1, far: 60 }}
           onPointerMissed={() => onSelectCell(null)}

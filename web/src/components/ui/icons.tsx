@@ -14,6 +14,7 @@ function Svg({ children, className }: { children: ReactNode; className?: string 
     <svg
       viewBox="0 0 24 24"
       className={className ?? 'h-4 w-4'}
+      focusable="false"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"

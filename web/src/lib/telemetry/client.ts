@@ -10,7 +10,7 @@ import type {
 
 export interface TelemetryFetchResult {
   response: TelemetryResponse;
-  /** True when the payload is synthetic - no credentials, or a `?scenario=` override. */
+  /** True only when the payload is synthetic - a `?scenario=` override. */
   demo: boolean;
   /** Mapping actually used, so the UI can show what was detected. */
   mapping: FieldMapping;
@@ -77,8 +77,17 @@ function interpret(
  * browser and from the app's WebView alike with no proxy in between - which is
  * what lets the app run standalone.
  *
- * Only a caller-initiated abort is re-thrown; an unreachable upstream is a
- * normal OFFLINE state rather than an error the UI must special-case.
+ * Failure contract: only a caller-initiated abort is re-thrown as-is. Every
+ * other transient failure (HTTP error, network error, upstream timeout,
+ * unparsable JSON) is thrown as an Error, NEVER collapsed into an empty
+ * response. Collapsing failures into `{ latest: null, history: [] }` made the
+ * caller wipe the last-known good data and reset `lastFetchedAt` on every
+ * dropped packet, and hid the real error. Callers must keep last-known data on
+ * throw and surface the error; only a successful fetch replaces state.
+ *
+ * The two non-error empty returns are deliberate: a `?scenario=` override
+ * (synthetic data, asked for explicitly) and no credentials (nothing
+ * configured - the UI shows ConnectPrompt, not invented numbers).
  */
 export async function fetchTelemetry(
   credentials: ChannelCredentials | null,
@@ -114,24 +123,24 @@ export async function fetchTelemetry(
     });
 
     if (!res.ok) {
-      return {
-        response: EMPTY_RESPONSE,
-        demo: false,
-        mapping: options.mapping ?? detectMapping([]),
-        inferred: false,
-      };
+      throw new Error(`ThingSpeak request failed: HTTP ${res.status}`);
     }
 
     const raw: unknown = await res.json();
     return { ...interpret(raw, options.mapping), demo: false };
   } catch (err) {
+    // Caller abort (unmount / credentials change): propagate unchanged so the
+    // caller can swallow it as a non-error. Anything else is a real transient
+    // failure and must surface - see the contract above.
     if (options.signal?.aborted) throw err;
-    return {
-      response: EMPTY_RESPONSE,
-      demo: false,
-      mapping: options.mapping ?? detectMapping([]),
-      inferred: false,
-    };
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      // The only remaining abort source is our own upstream timeout.
+      throw new Error(
+        `ThingSpeak request timed out after ${UPSTREAM_TIMEOUT_MS / 1000}s`,
+      );
+    }
+    if (err instanceof Error) throw err;
+    throw new Error('ThingSpeak request failed');
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', abortFromCaller);

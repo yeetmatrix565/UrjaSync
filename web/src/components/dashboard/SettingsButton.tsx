@@ -23,16 +23,18 @@ export function SettingsButton({ connected }: { connected: boolean }) {
       aria-label="ThingSpeak channel settings"
       title={connected ? 'ThingSpeak settings' : 'Connect a ThingSpeak channel'}
       className={cx(
-        'grid h-7 w-7 place-items-center rounded-full border bg-white/5 transition',
+        // 36px tap target (was 28px) so the gear is comfortably tappable.
+        'focus-ring grid h-9 w-9 place-items-center rounded-full border bg-white/5 transition',
         'hover:border-cyan-300/40 hover:text-cyan-200 active:scale-95',
         connected
-          ? 'border-white/10 text-white/60'
+          ? 'border-white/10 text-white/70'
           : 'border-amber-300/40 text-amber-200',
       )}
     >
       <svg
         viewBox="0 0 24 24"
-        className="h-3.5 w-3.5"
+        className="h-4 w-4"
+        aria-hidden="true"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"

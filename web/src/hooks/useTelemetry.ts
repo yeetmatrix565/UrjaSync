@@ -21,7 +21,7 @@ export interface UseTelemetryResult {
   lastFetchedAt: number | null;
   error: string | null;
   loading: boolean;
-  /** True while showing synthetic data (no credentials, or a scenario override). */
+  /** True while showing synthetic data (a `?scenario=` override only). */
   isDemo: boolean;
   hasCredentials: boolean;
   /** Field layout in use, so the UI can tell a measured value from a derived one. */
@@ -81,21 +81,52 @@ export function useTelemetry(): UseTelemetryResult {
       if (inFlight.current || document.hidden) return;
       inFlight.current = true;
       try {
-        const { response, demo, mapping: usedMapping } = await fetchTelemetry(credentials, {
+        const {
+          response,
+          demo,
+          mapping: usedMapping,
+        } = await fetchTelemetry(credentials, {
           scenario,
           signal: controller.signal,
         });
         if (cancelled) return;
 
+        // No credentials and no scenario is the intentional "not configured"
+        // state, not a fetch: clear the (now stale) previous channel's data
+        // and reset lastFetchedAt to null - no data was received, and the
+        // old timestamp must not keep implying freshness after disconnect.
+        // Every other successful return replaces state, including a
+        // successful-but-empty channel (latest null, history []), which is
+        // real information that the channel currently has no feeds.
         setLatest(response.latest ?? null);
         setHistory(response.history);
-        setLastFetchedAt(Date.now());
+        if (credentials === null && scenario === null) {
+          setLastFetchedAt(null);
+        } else {
+          setLastFetchedAt(Date.now());
+        }
         setIsDemo(demo);
         setMapping(usedMapping);
         setError(null);
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // Only a caller-initiated abort is a non-error. fetchTelemetry
+        // re-throws caller aborts unchanged, so an AbortError here with our
+        // own signal aborted is a cleanup; an AbortError with our signal
+        // still live is the client's upstream timeout, which must surface.
+        // (fetchTelemetry already converts that case to a timeout Error, so
+        // this branch is defence-in-depth, not the primary path.)
+        if (
+          err instanceof DOMException &&
+          err.name === 'AbortError' &&
+          controller.signal.aborted
+        ) {
+          return;
+        }
+        // Transient failure: keep last-known latest/history/lastFetchedAt
+        // untouched and surface the error, so the UI keeps showing the last
+        // good readings (downgraded to STALE by the provider) instead of
+        // wiping to dashes on every dropped packet.
         setError(err instanceof Error ? err.message : 'request failed');
       } finally {
         inFlight.current = false;

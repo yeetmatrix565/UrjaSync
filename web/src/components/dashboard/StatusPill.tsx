@@ -32,17 +32,19 @@ export function StatusPill({ status, onRefresh, loading }: StatusPillProps) {
   return (
     <div className="flex items-center gap-2">
       <span
+        role="status"
         className={cx(
-          'inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 ring-1 ring-inset',
+          'inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 ring-1 ring-inset',
           s.ring,
         )}
       >
         <span
           className={cx(
-            'h-1.5 w-1.5 rounded-full',
+            'h-2 w-2 rounded-full',
             s.dot,
-            status === 'LIVE' && 'animate-pulseSoft',
+            status === 'LIVE' && 'animate-pulseSoft motion-reduce:animate-none',
           )}
+          aria-hidden="true"
         />
         <span className={cx('font-mono text-[11px] font-medium tracking-widest', s.text)}>
           {status}
@@ -52,11 +54,13 @@ export function StatusPill({ status, onRefresh, loading }: StatusPillProps) {
       <button
         type="button"
         onClick={onRefresh}
-        aria-label="Refresh telemetry"
+        aria-label={loading ? 'Refreshing telemetry…' : 'Refresh telemetry'}
+        aria-busy={loading || undefined}
+        disabled={loading}
         className={cx(
-          'grid h-7 w-7 place-items-center rounded-full border border-white/10 bg-white/5 text-white/60 transition',
-          'hover:border-cyan-300/40 hover:text-cyan-200 active:scale-95',
-          loading && 'animate-spin',
+          'focus-ring grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-white/70 transition',
+          'hover:border-cyan-300/40 hover:text-cyan-200 active:scale-95 disabled:cursor-wait disabled:opacity-60',
+          loading && 'animate-spin motion-reduce:animate-none',
         )}
       >
         <svg

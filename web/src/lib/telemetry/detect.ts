@@ -30,8 +30,9 @@ export function extractFieldLabels(raw: unknown): FieldLabels {
 
 const UNIT_PATTERN = /[[(][^)\]]*[)\]]/g;
 const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
-// Tested against the raw label, so units inside brackets survive - hence the
-// case-insensitive flags, since 'Temperature (F)' is not lowercase.
+// Tested against the RAW label (see detectTempUnit), so units inside brackets
+// survive - hence the case-insensitive flags, since 'Temperature (F)' is not
+// lowercase.
 const FAHRENHEIT = /\bf\b|fahrenheit/i;
 const CELSIUS = /\bc\b|celsius|centigrade/i;
 
@@ -57,9 +58,19 @@ const METRIC_RULES: Array<{ key: MetricKey; test: RegExp }> = [
   { key: 'packV', test: /\bpack\b|\btotal\b|battery voltage|\bvbat\b|pack voltage/ },
 ];
 
-const CELL_PATTERNS = [/\bcell\s*(\d+)\b/, /\bc\s*(\d+)\b/, /\bv\s*(\d+)\b/];
+const CELL_PATTERNS = [/\bcell\s*(\d+)\b/, /\bc\s*(\d+)\b/];
+// NOTE: there is deliberately NO /\bv\s*(\d+)\b/ pattern here. `V<n>` is
+// pack-voltage shorthand ('Pack V1'), not a cell: the old V-pattern matched
+// 'Pack V1' as Cell 1. A bare 'V1' is likewise ambiguous, so it is not a
+// cell either - it falls through to the pack-voltage / fallback handling.
+// Cell labels must say 'cell' or 'c' explicitly (e.g. 'Cell 1', 'CELL 1',
+// 'Cell-1', 'c1').
 
 function detectCellIndex(normalised: string): number | null {
+  // Pack labels are never cells, even if they carry a number: 'Pack V1',
+  // 'Pack Voltage', 'Pack V' must resolve via the pack-voltage rule below,
+  // never as Cell 1. Check before the cell patterns, not after.
+  if (/\bpack\b/.test(normalised)) return null;
   for (const pattern of CELL_PATTERNS) {
     const match = pattern.exec(normalised);
     if (match?.[1]) return Number(match[1]);
@@ -67,8 +78,16 @@ function detectCellIndex(normalised: string): number | null {
   return null;
 }
 
-function detectTempUnit(normalised: string): TempUnit {
-  if (FAHRENHEIT.test(normalised) && !CELSIUS.test(normalised)) return 'F';
+/**
+ * Unit of the temperature label. Takes the RAW label, not the normalised
+ * text: normalise() strips bracketed units, so '(F)' / '(C)' would already be
+ * gone and every Fahrenheit channel would silently read as Celsius. The
+ * 'fahrenheit' word form is checked for the same reason - it survives
+ * normalise(), but keeping one input (the raw label) keeps the two cases
+ * consistent.
+ */
+function detectTempUnit(rawLabel: string): TempUnit {
+  if (FAHRENHEIT.test(rawLabel) && !CELSIUS.test(rawLabel)) return 'F';
   return 'C';
 }
 

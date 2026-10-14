@@ -56,7 +56,15 @@ export function createParticleStream(count = COUNT, scale = BASE_SCALE): Particl
   mesh.frustumCulled = false;
 
   const offsets = new Float32Array(count);
-  for (let i = 0; i < count; i++) offsets[i] = i / count;
+  // Per-particle variation, baked once so the hot loop does no allocation
+  // and no per-particle random calls — only cheap sin lookups.
+  const phases = new Float32Array(count);
+  const baseScales = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    offsets[i] = i / count;
+    phases[i] = Math.random() * Math.PI * 2;
+    baseScales[i] = 0.7 + Math.random() * 0.6;
+  }
 
   const dummy = new THREE.Object3D();
   const color = new THREE.Color();
@@ -66,6 +74,10 @@ export function createParticleStream(count = COUNT, scale = BASE_SCALE): Particl
   const discharging = new THREE.Color(PALETTE.orange);
 
   let head = 0;
+  // Smoothed flow speed: current steps between polls must not jerk the
+  // stream, and the stream must actually stop — not creep — at 0 A.
+  let smoothSpeed = 0;
+  let lastDir = 0;
 
   const update = (
     delta: number,
@@ -83,31 +95,42 @@ export function createParticleStream(count = COUNT, scale = BASE_SCALE): Particl
 
     if (material.opacity <= 0.01) {
       mesh.visible = false;
+      // Freeze the stream while faded out so it resumes from a standstill
+      // instead of visibly jumping when flow returns.
+      smoothSpeed = 0;
       return;
     }
     mesh.visible = true;
 
     const dir = currentA === null || currentA >= 0 ? 1 : -1;
-    const speed = Math.min(0.4, 0.03 + mag * 0.1);
-    head = mod1(head + dir * speed * delta);
+    // Ease toward the target speed; exactly 0 when there is no flow, so
+    // the particles pause at 0 A instead of drifting at a base speed.
+    const targetSpeed = hasFlow ? Math.min(0.4, 0.03 + mag * 0.1) : 0;
+    smoothSpeed += (targetSpeed - smoothSpeed) * Math.min(1, delta * 3);
+    head = mod1(head + dir * smoothSpeed * delta);
 
-    color.copy(dir > 0 ? discharging : charging);
+    // Colour only changes when the flow direction flips — skip 150
+    // setColorAt calls per frame while the direction is steady.
+    if (dir !== lastDir) {
+      color.copy(dir > 0 ? discharging : charging);
+      for (let i = 0; i < count; i++) mesh.setColorAt(i, color);
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      lastDir = dir;
+    }
 
     for (let i = 0; i < count; i++) {
       const u = mod1(offsets[i]! + head);
       curve.getPointAt(u, point);
       dummy.position.copy(point);
-      // subtle pulse so the stream shimmers
-      const shimmer = 0.7 + 0.5 * Math.sin(elapsed * 3 + u * 40);
-      const size = 0.6 + 0.9 * shimmer;
-      dummy.scale.setScalar(size);
+      // Gentle shimmer from the baked per-particle phase — smoother than a
+      // shared sine because neighbours no longer pulse in lockstep.
+      const shimmer = 0.75 + 0.25 * Math.sin(elapsed * 2.2 + phases[i]!);
+      dummy.scale.setScalar(baseScales[i]! * shimmer);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, color);
     }
 
     mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   };
 
   const dispose = (): void => {

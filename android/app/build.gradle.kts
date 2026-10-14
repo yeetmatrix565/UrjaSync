@@ -3,6 +3,20 @@ plugins {
 }
 
 /**
+ * Version stamped into a release. CI derives these from the git tag, e.g.
+ *   ./gradlew assembleRelease -PappVersionName=1.2.0 -PappVersionCode=10200
+ * The defaults leave ordinary local builds untouched.
+ */
+val appVersionName = (findProperty("appVersionName") as String?) ?: "1.0"
+val appVersionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
+
+/**
+ * The release keystore, supplied by CI through the environment. Null locally,
+ * which is what keeps signing optional rather than mandatory.
+ */
+val releaseKeystorePath = System.getenv("URJA_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+
+/**
  * Bundles the web/ static export as a SINGLE zip asset.
  *
  * It is deliberately not copied as loose files: aapt2 silently drops any asset
@@ -51,8 +65,41 @@ android {
         // pushes the WebView under the status bar and zeroes WebView's CSS
         // safe-area env() values. At 34 the window insets itself normally.
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    signingConfigs {
+        // Created only when the keystore is present, so no local build depends on
+        // a secret existing.
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("URJA_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("URJA_KEY_ALIAS")
+                keyPassword = System.getenv("URJA_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Both are on, so the keep rules in proguard-rules.pro and
+            // res/raw/keep.xml are load-bearing - see the comments in each.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+
+            // Left deliberately unsigned (app-release-unsigned.apk) when no
+            // keystore is configured, rather than quietly signed with the debug
+            // key - an unsigned artifact can't be mistaken for a publishable one.
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     compileOptions {

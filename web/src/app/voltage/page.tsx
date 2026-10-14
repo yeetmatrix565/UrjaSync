@@ -29,9 +29,15 @@ export default function VoltagePage() {
 
   if (!hasAnything) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
-        <PageHeader title="Voltage" subtitle="This channel publishes no voltage fields." />
-        <div className="mt-4">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+      >
+        <PageHeader
+          title="Voltage"
+          subtitle="This channel publishes no voltage fields."
+        />
+        <div className="mt-5">
           <EmptyState
             title="no voltage data"
             detail="The field mapping found no pack or cell voltage in this channel. Check the channel's field labels on ThingSpeak."
@@ -45,7 +51,10 @@ export default function VoltagePage() {
   const packIsDerived = mapping?.packV === undefined;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <PageHeader
         title="Voltage & cells"
         subtitle={
@@ -56,25 +65,30 @@ export default function VoltagePage() {
         source={packIsDerived ? 'DERIVED' : 'LIVE'}
       />
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">Pack voltage now</p>
-        <p className="num text-3xl font-medium leading-none text-cyan-300">
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">Pack voltage now</h2>
+        <p className="num text-4xl font-semibold leading-none tracking-tight sm:text-[2.75rem] text-cyan-300">
           {fmt(snapshot.packV, 2)}
-          <span className="ml-1 font-mono text-xs text-white/40">V</span>
+          <span className="ml-1 font-mono text-sm text-white/55">V</span>
         </p>
         <div className="mt-3">
           <StatRow label="window minimum" value={fmt(pack.min, 2)} unit="V" />
           <StatRow label="window maximum" value={fmt(pack.max, 2)} unit="V" />
           <StatRow label="window average" value={fmt(pack.mean, 2)} unit="V" />
           <StatRow label="spread (max − min)" value={fmt(pack.range, 3)} unit="V" />
-          <StatRow label="cell imbalance now" value={fmt(snapshot.imbalanceV, 3)} unit="V" emphasis />
+          <StatRow
+            label="cell imbalance now"
+            value={fmt(snapshot.imbalanceV, 3)}
+            unit="V"
+            emphasis
+          />
         </div>
       </section>
 
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
+      <section className="mt-5">
+        <div className="mb-3 flex items-center justify-between">
           <h2 className="label-xs">Cells</h2>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-white/50">
             {metrics.cells.length} detected
           </span>
         </div>
@@ -86,8 +100,8 @@ export default function VoltagePage() {
         />
 
         {metrics.cells.length > 0 ? (
-          <div className="glass mt-2 p-3.5">
-            <p className="label-xs mb-1">Per-cell range over the window</p>
+          <div className="glass mt-3 p-4 sm:p-5">
+            <h2 className="label-xs mb-1">Per-cell range over the window</h2>
             {metrics.cells.map((cell, index) => (
               <StatRow
                 key={index}
@@ -101,14 +115,19 @@ export default function VoltagePage() {
         ) : null}
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-2">Cell voltages over the window</p>
-        <div className="h-52 w-full">
-          <TrendChart rows={rows} series={cellSeries} unit="V" />
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-2">Cell voltages over the window</h2>
+        <div className="h-56 w-full sm:h-60">
+          <TrendChart
+            rows={rows}
+            series={cellSeries}
+            unit="V"
+            ariaLabel="Cell voltages over the window"
+          />
         </div>
       </section>
 
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-5 space-y-3">
         <FormulaCard
           doc={FORMULAS.packVoltage}
           inputs={[

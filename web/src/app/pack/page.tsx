@@ -20,14 +20,17 @@ export default function PackPage() {
   const cellCount = metrics.cells.length;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
+    <main
+      id="main-content"
+      className="mx-auto w-full max-w-3xl px-4 pb-20 pt-4 sm:px-6 sm:pt-6"
+    >
       <PageHeader
         title="Pack explorer"
         subtitle={`${cellCount} ${cellCount === 1 ? 'cell' : 'cells'} · drag to orbit, pinch to zoom, tap a cell`}
         source="LIVE"
       />
 
-      <section className="mt-4">
+      <section className="mt-5">
         <LazyBatteryScene
           valuesRef={valuesRef}
           alerts={alerts}
@@ -39,10 +42,10 @@ export default function PackPage() {
         />
       </section>
 
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
+      <section className="mt-5">
+        <div className="mb-3 flex items-center justify-between">
           <h2 className="label-xs">Cells</h2>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-white/50">
             tap to focus in 3D
           </span>
         </div>
@@ -54,8 +57,8 @@ export default function PackPage() {
         />
       </section>
 
-      <section className="glass mt-4 p-3.5">
-        <p className="label-xs mb-1">Build</p>
+      <section className="glass mt-5 p-4 sm:p-5">
+        <h2 className="label-xs mb-1">Build</h2>
         <StatRow label="cells detected" value={String(cellCount)} />
         <StatRow label="pack voltage" value={fmt(snapshot.packV, 3)} unit="V" />
         <StatRow label="cell imbalance" value={fmt(snapshot.imbalanceV, 3)} unit="V" />
@@ -71,7 +74,7 @@ export default function PackPage() {
       </section>
 
       {cellCount === 0 ? (
-        <div className="mt-4">
+        <div className="mt-5">
           <EmptyState
             title="no cells to display"
             detail="The scene still renders the enclosure, but this channel publishes no individual cell voltages."
