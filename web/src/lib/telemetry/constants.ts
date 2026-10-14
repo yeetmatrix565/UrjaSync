@@ -55,6 +55,16 @@ export const DEFAULT_FIELD_MAPPING: FieldMapping = {
   soh: 8,
 };
 
+/**
+ * Advisory thresholds for the health screen. These are NOT from the firmware -
+ * they are common lead-acid/lithium practice (keep a 20% reserve, treat 80% SOH
+ * as end of useful life) and are labelled as advisory wherever they are used.
+ */
+export const ADVISORY_THRESHOLDS = {
+  socLow: 20,
+  sohEndOfLife: 80,
+} as const;
+
 /** Cell palette for charts when a pack has more than three cells. */
 export const CELL_SERIES_COLORS = [
   '#22d3ee',

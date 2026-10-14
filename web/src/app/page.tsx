@@ -1,55 +1,49 @@
 'use client';
 
-import { memo, useMemo, useState } from 'react';
-import BatteryScene from '@/components/three/BatteryScene';
+import { useMemo, useState } from 'react';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
-import { CellStrip } from '@/components/dashboard/CellStrip';
-import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
-import { EventFeed } from '@/components/dashboard/EventFeed';
-import { Graphs } from '@/components/dashboard/Graphs';
-import { SectionHeading } from '@/components/dashboard/SectionHeading';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { useNow } from '@/hooks/useNow';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { useTelemetry } from '@/hooks/useTelemetry';
-import { useTelemetryLerp } from '@/hooks/useTelemetryLerp';
-import { fmt, fmtInt, relTime } from '@/lib/format';
-import { POLL_INTERVAL_MS } from '@/lib/telemetry/constants';
-import type { Status } from '@/lib/telemetry/types';
-import { hasAnyValue } from '@/lib/telemetry/values';
+import { CardGrid } from '@/components/dashboard/CardGrid';
+import { HeadlineStats } from '@/components/dashboard/HeadlineStats';
+import { MetricCard, type MetricCardProps } from '@/components/dashboard/MetricCard';
+import { PackHero } from '@/components/dashboard/PackHero';
+import { SummaryBar } from '@/components/dashboard/SummaryBar';
+import { useTelemetryContext } from '@/components/providers/TelemetryProvider';
+import {
+  BoltIcon,
+  CurrentIcon,
+  EnergyIcon,
+  HealthIcon,
+  InsightsIcon,
+  PowerIcon,
+  TempIcon,
+} from '@/components/ui/icons';
+import type { DataSource } from '@/components/ui/DataSourceBadge';
+import type { MetricStatus } from '@/components/ui/StatusDot';
+import { fmt, fmtInt } from '@/lib/format';
+import { cumulativeEnergyWh } from '@/lib/electrical/energy';
+import { hasFinite } from '@/lib/electrical/numeric';
+import { ADVISORY_THRESHOLDS, ALERT_THRESHOLDS } from '@/lib/telemetry/constants';
+import { formatDuration } from '@/lib/telemetry/derive';
 
-const MemoBatteryScene = memo(BatteryScene);
-const POLL_SECONDS = POLL_INTERVAL_MS / 1000;
+type CardDefinition = Omit<MetricCardProps, 'source' | 'status'> & {
+  available: boolean;
+  source: DataSource;
+  status: MetricStatus;
+};
 
-interface StatDefinition {
-  id: string;
-  label: string;
-  value: string;
-  unit: string;
-  color: string;
-  spark: Array<number | null>;
-  hint?: string;
+function temperatureStatus(tempC: number | null): MetricStatus {
+  if (tempC === null) return 'unknown';
+  if (tempC > ALERT_THRESHOLDS.tempCritical) return 'critical';
+  if (tempC > ALERT_THRESHOLDS.tempWarn) return 'warn';
+  return 'ok';
 }
 
 export default function DashboardPage() {
-  const {
-    latest,
-    history,
-    lastFetchedAt,
-    error,
-    loading,
-    isDemo,
-    hasCredentials,
-    refresh,
-  } = useTelemetry();
-  const reducedMotion = useReducedMotion();
-  const { valuesRef, snapshot } = useTelemetryLerp(latest, reducedMotion);
-  const now = useNow(1000);
+  const { latest, metrics, energy, snapshot, status, mapping, alerts, history, error, loading } =
+    useTelemetryContext();
 
-  const [selectedCell, setSelectedCell] = useState<number | null>(null);
   const [dismissedSig, setDismissedSig] = useState<string | null>(null);
 
-  const alerts = useMemo(() => latest?.alerts ?? [], [latest]);
   const alertSig = useMemo(
     () =>
       alerts
@@ -60,186 +54,196 @@ export default function DashboardPage() {
   );
   const bannerVisible = alerts.length > 0 && dismissedSig !== alertSig;
 
-  // A transport error means the numbers on screen are no longer fresh, even
-  // though the last payload we hold may have said LIVE.
-  const status: Status = latest ? (error ? 'STALE' : latest.status) : 'OFFLINE';
-  const agoLabel = lastFetchedAt ? relTime(now - lastFetchedAt) : '\u2014';
+  const cellAlerts = alerts.some((a) => /OVERVOLTAGE|UNDERVOLTAGE/.test(a.code));
+  const advisoryHealth =
+    (snapshot.soc !== null && snapshot.soc < ADVISORY_THRESHOLDS.socLow) ||
+    (snapshot.soh !== null && snapshot.soh < ADVISORY_THRESHOLDS.sohEndOfLife);
 
-  const sparks = useMemo(
-    () => ({
-      packV: history.map((f) => f.packV),
-      currentA: history.map((f) => f.currentA),
-      powerW: history.map((f) => f.powerW),
-      tempC: history.map((f) => f.tempC),
-      soc: history.map((f) => f.soc),
-      soh: history.map((f) => f.soh),
-    }),
-    [history],
-  );
+  // A pack voltage that the channel does not publish is summed from the cells,
+  // so it is derived rather than measured - and labelled that way.
+  const packVoltageSource: DataSource = mapping?.packV === undefined ? 'DERIVED' : 'LIVE';
 
-  const current = snapshot.currentA;
   const currentDir =
-    current === null || !Number.isFinite(current)
-      ? '\u2014'
-      : current > 0.02
+    snapshot.currentA === null
+      ? '—'
+      : snapshot.currentA > 0.02
         ? 'discharging'
-        : current < -0.02
+        : snapshot.currentA < -0.02
           ? 'charging'
           : 'idle';
-  const currentColor =
-    current === null || !Number.isFinite(current)
-      ? '#22d3ee'
-      : current < -0.02
-        ? '#22d3ee'
-        : current > 0.02
-          ? '#f97316'
-          : '#94a3b8';
 
-  // A card is only shown when the channel actually publishes that metric, so a
-  // basic pack gets a short, honest board instead of a row of dashes.
-  const candidates: Array<StatDefinition | null> = [
-    hasAnyValue(sparks.packV)
-      ? {
-          id: 'pack',
-          label: 'Pack voltage',
-          value: fmt(snapshot.packV, 2),
-          unit: 'V',
-          color: '#22d3ee',
-          spark: sparks.packV,
-          hint: `imbalance ${fmt(snapshot.imbalanceV, 3)} V`,
-        }
-      : null,
-    hasAnyValue(sparks.currentA)
-      ? {
-          id: 'current',
-          label: 'Current',
-          value: fmt(snapshot.currentA, 2),
-          unit: 'A',
-          color: currentColor,
-          spark: sparks.currentA,
-          hint: currentDir,
-        }
-      : null,
-    hasAnyValue(sparks.powerW)
-      ? {
-          id: 'power',
-          label: 'Power',
-          value: fmt(snapshot.powerW, 1),
-          unit: 'W',
-          color: '#a78bfa',
-          spark: sparks.powerW,
-          hint: 'packV x current',
-        }
-      : null,
-    hasAnyValue(sparks.tempC)
-      ? {
-          id: 'temp',
-          label: 'Temperature',
-          value: fmt(snapshot.tempC, 1),
-          unit: '\u00b0C',
-          color: '#e5484d',
-          spark: sparks.tempC,
-          hint: 'channel sensor',
-        }
-      : null,
-    hasAnyValue(sparks.soc)
-      ? {
-          id: 'soc',
-          label: 'SOC',
-          value: fmtInt(snapshot.soc),
-          unit: '%',
-          color: '#30d158',
-          spark: sparks.soc,
-          hint: 'state of charge',
-        }
-      : null,
-    hasAnyValue(sparks.soh)
-      ? {
-          id: 'soh',
-          label: 'SOH',
-          value: fmtInt(snapshot.soh),
-          unit: '%',
-          color: '#8b5cf6',
-          spark: sparks.soh,
-          hint: 'state of health',
-        }
-      : null,
+  const energyTrend = useMemo(() => {
+    const samples = history
+      .map((entry) => ({
+        t: Date.parse(entry.timestamp),
+        powerW: entry.powerW,
+        currentA: entry.currentA,
+      }))
+      .filter((sample) => Number.isFinite(sample.t));
+    return cumulativeEnergyWh(samples);
+  }, [history]);
+
+  const cards: CardDefinition[] = [
+    {
+      title: 'Voltage',
+      href: '/voltage',
+      icon: <BoltIcon />,
+      value: fmt(snapshot.packV, 2),
+      unit: 'V',
+      hint: `imbalance ${fmt(snapshot.imbalanceV, 3)} V`,
+      spark: metrics.packV.values,
+      sparkColor: '#22d3ee',
+      available: hasFinite(metrics.packV.values) || metrics.cells.length > 0,
+      source: packVoltageSource,
+      status: cellAlerts ? 'critical' : latest ? 'ok' : 'unknown',
+    },
+    {
+      title: 'Current',
+      href: '/current',
+      icon: <CurrentIcon />,
+      value: fmt(snapshot.currentA, 2),
+      unit: 'A',
+      hint: currentDir,
+      spark: metrics.currentA.values,
+      sparkColor: '#a78bfa',
+      available: hasFinite(metrics.currentA.values),
+      source: 'LIVE',
+      status: latest ? 'ok' : 'unknown',
+    },
+    {
+      title: 'Power',
+      href: '/power',
+      icon: <PowerIcon />,
+      value: fmt(snapshot.powerW, 1),
+      unit: 'W',
+      hint: `avg ${fmt(metrics.powerW.summary.mean, 1)} W`,
+      spark: metrics.powerW.values,
+      sparkColor: '#f97316',
+      available: hasFinite(metrics.powerW.values),
+      source: 'DERIVED',
+      status: latest ? 'ok' : 'unknown',
+    },
+    {
+      title: 'Energy',
+      href: '/energy',
+      icon: <EnergyIcon />,
+      value: fmt(energy.netWh, 2),
+      unit: 'Wh',
+      hint: `${formatDuration(energy.durationMs)} · ${fmt(energy.dischargedAh, 2)} Ah out`,
+      spark: energyTrend,
+      sparkColor: '#30d158',
+      available: energy.powerSamples > 0,
+      source: 'DERIVED',
+      status: latest ? 'ok' : 'unknown',
+    },
+    {
+      title: 'Temperature',
+      href: '/temperature',
+      icon: <TempIcon />,
+      value: fmt(snapshot.tempC, 1),
+      unit: '\u00b0C',
+      hint: `warn above ${ALERT_THRESHOLDS.tempWarn}\u00b0C`,
+      spark: metrics.tempC.values,
+      sparkColor: '#e5484d',
+      available: hasFinite(metrics.tempC.values),
+      source: 'LIVE',
+      status: temperatureStatus(snapshot.tempC),
+    },
+    {
+      title: 'Cell health',
+      href: '/health',
+      icon: <HealthIcon />,
+      value: fmtInt(snapshot.soc),
+      unit: '%',
+      hint: `SOH ${fmtInt(snapshot.soh)}% · advisory limits`,
+      spark: metrics.soc.values,
+      sparkColor: '#8b5cf6',
+      available: hasFinite(metrics.soc.values) || hasFinite(metrics.soh.values),
+      source: 'LIVE',
+      status: advisoryHealth ? 'warn' : latest ? 'ok' : 'unknown',
+    },
+    {
+      title: 'Insights',
+      href: '/insights',
+      icon: <InsightsIcon />,
+      value: fmtInt(alerts.length),
+      unit: alerts.length === 1 ? 'alert' : 'alerts',
+      hint: alerts.length > 0 ? 'tap for the rules that fired' : 'no active alerts',
+      spark: metrics.imbalanceV.values,
+      sparkColor: '#f5a524',
+      available: true,
+      source: 'DERIVED',
+      status: alerts.some((a) => a.severity === 'critical')
+        ? 'critical'
+        : alerts.length > 0
+          ? 'warn'
+          : latest
+            ? 'ok'
+            : 'unknown',
+    },
   ];
-  const cards = candidates.filter((card): card is StatDefinition => card !== null);
+
+  // While the first poll is in flight we cannot yet know which metrics the
+  // channel publishes, so every card is shown with a dash. Once data lands, only
+  // the ones the channel actually provides stay - a permanent metric is hidden
+  // rather than padded with zeros, and an absent one disappears.
+  const visible = loading ? cards : cards.filter((card) => card.available);
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-3 pb-24 pt-3 sm:px-5 sm:pt-5">
+    <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-3 sm:px-5 sm:pt-5">
       <AlertBanner
         alerts={alerts}
         visible={bannerVisible}
         onDismiss={() => setDismissedSig(alertSig)}
       />
 
-      <DashboardHeader
-        status={status}
-        agoLabel={agoLabel}
-        isDemo={isDemo}
-        connected={hasCredentials}
-        loading={loading && !latest}
-        onRefresh={refresh}
-      />
-
-      <section className="mt-3">
-        <MemoBatteryScene
-          valuesRef={valuesRef}
-          alerts={alerts}
-          cellCount={snapshot.cells.length}
-          selectedCell={selectedCell}
-          onSelectCell={setSelectedCell}
-          reducedMotion={reducedMotion}
-        />
-      </section>
+      <SummaryBar />
 
       {error ? (
-        <p className="mt-2 font-mono text-[10px] text-brand-amber/80">
-          ! {error} - retrying every {POLL_SECONDS}s
-        </p>
+        <p className="mt-2 font-mono text-[10px] text-brand-amber/80">! {error}</p>
       ) : null}
 
-      {cards.length > 0 ? (
-        <section className="mt-4">
-          <SectionHeading title="Telemetry" hint={`poll ${POLL_SECONDS}s · lerped`} />
-          <div className="no-scrollbar snap-row -mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:px-0 lg:grid-cols-6">
-            {cards.map((card) => (
-              <StatCard
-                key={card.id}
-                label={card.label}
-                value={card.value}
-                unit={card.unit}
-                color={card.color}
-                spark={card.spark}
-                hint={card.hint}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <section className="mt-3">
+        <PackHero />
+      </section>
 
-      <section className="mt-4">
-        <SectionHeading title="Cells" hint="tap to focus" />
-        <CellStrip
-          cells={snapshot.cells}
-          alerts={alerts}
-          selected={selectedCell}
-          onSelect={setSelectedCell}
-        />
+      <section className="mt-2.5">
+        <HeadlineStats />
       </section>
 
       <section className="mt-4">
-        <Graphs history={history} />
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="label-xs">Analysis</h2>
+          <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
+            {loading ? 'loading…' : `${visible.length} of ${cards.length} available`}
+          </span>
+        </div>
+        <CardGrid>
+          {visible.map((card) => (
+            <MetricCard
+              key={card.href}
+              title={card.title}
+              href={card.href}
+              icon={card.icon}
+              value={card.value}
+              unit={card.unit}
+              hint={card.hint}
+              spark={card.spark}
+              sparkColor={card.sparkColor}
+              source={card.source}
+              status={card.status}
+            />
+          ))}
+        </CardGrid>
       </section>
 
-      <section className="mt-4">
-        <EventFeed history={history} />
-      </section>
+      <p className="mt-4 font-mono text-[9px] leading-relaxed text-white/25">
+        Cards without data from this channel are hidden rather than filled with zeros.
+        Every value is labelled by origin: live, derived or simulated.
+      </p>
 
       <footer className="mt-6 text-center font-mono text-[9px] uppercase tracking-[0.3em] text-white/20">
-        Urja Sync · ESP32 BMS · ThingSpeak
+        {status} · Urja Sync
       </footer>
     </main>
   );

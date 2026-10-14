@@ -23,12 +23,11 @@ const STYLES: Record<Status, { dot: string; text: string; ring: string }> = {
 
 export interface StatusPillProps {
   status: Status;
-  agoLabel: string;
   onRefresh: () => void;
   loading?: boolean;
 }
 
-export function StatusPill({ status, agoLabel, onRefresh, loading }: StatusPillProps) {
+export function StatusPill({ status, onRefresh, loading }: StatusPillProps) {
   const s = STYLES[status];
   return (
     <div className="flex items-center gap-2">
@@ -48,7 +47,6 @@ export function StatusPill({ status, agoLabel, onRefresh, loading }: StatusPillP
         <span className={cx('font-mono text-[11px] font-medium tracking-widest', s.text)}>
           {status}
         </span>
-        <span className="font-mono text-[10px] text-white/40">· {agoLabel}</span>
       </span>
 
       <button

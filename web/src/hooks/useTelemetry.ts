@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CONFIG_CHANGED_EVENT, readCredentials } from '@/lib/telemetry/bridge';
 import { asScenario, fetchTelemetry } from '@/lib/telemetry/client';
 import { POLL_INTERVAL_MS } from '@/lib/telemetry/constants';
-import type { ChannelCredentials, Telemetry } from '@/lib/telemetry/types';
+import type { ChannelCredentials, FieldMapping, Telemetry } from '@/lib/telemetry/types';
 
 /** readCredentials() builds a fresh object every call, so compare by value. */
 function sameCredentials(
@@ -24,6 +24,8 @@ export interface UseTelemetryResult {
   /** True while showing synthetic data (no credentials, or a scenario override). */
   isDemo: boolean;
   hasCredentials: boolean;
+  /** Field layout in use, so the UI can tell a measured value from a derived one. */
+  mapping: FieldMapping | null;
   refresh: () => void;
 }
 
@@ -41,6 +43,7 @@ export function useTelemetry(): UseTelemetryResult {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(true);
+  const [mapping, setMapping] = useState<FieldMapping | null>(null);
   const [nonce, setNonce] = useState(0);
   const inFlight = useRef(false);
 
@@ -78,7 +81,7 @@ export function useTelemetry(): UseTelemetryResult {
       if (inFlight.current || document.hidden) return;
       inFlight.current = true;
       try {
-        const { response, demo } = await fetchTelemetry(credentials, {
+        const { response, demo, mapping: usedMapping } = await fetchTelemetry(credentials, {
           scenario,
           signal: controller.signal,
         });
@@ -88,6 +91,7 @@ export function useTelemetry(): UseTelemetryResult {
         setHistory(response.history);
         setLastFetchedAt(Date.now());
         setIsDemo(demo);
+        setMapping(usedMapping);
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -110,6 +114,11 @@ export function useTelemetry(): UseTelemetryResult {
     return () => {
       cancelled = true;
       controller.abort();
+      // The aborted request is finished with, so release the in-flight guard.
+      // Without this, React's StrictMode double-invoke (mount, cleanup, mount
+      // again) leaves the second effect seeing a stale `true` and never
+      // fetching - the dashboard then stays empty until the poll interval fires.
+      inFlight.current = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -123,6 +132,7 @@ export function useTelemetry(): UseTelemetryResult {
     loading,
     isDemo,
     hasCredentials: credentials !== null,
+    mapping,
     refresh,
   };
 }

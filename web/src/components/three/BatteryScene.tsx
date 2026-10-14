@@ -17,10 +17,14 @@ export interface BatterySceneProps {
   selectedCell: number | null;
   onSelectCell: (index: number | null) => void;
   reducedMotion: boolean;
+  /** Height utilities, so the same scene serves as a hero or a full screen. */
+  heightClass?: string;
 }
 
-const CONTAINER =
-  'relative h-[45vh] min-h-[290px] w-full overflow-hidden rounded-3xl border border-white/10 bg-base';
+const CONTAINER_BASE =
+  'relative w-full overflow-hidden rounded-3xl border border-white/10 bg-base';
+
+const DEFAULT_HEIGHT = 'h-[45vh] min-h-[290px]';
 
 const MOBILE_WIDTH_PX = 640;
 
@@ -63,8 +67,10 @@ export default function BatteryScene({
   selectedCell,
   onSelectCell,
   reducedMotion,
+  heightClass,
 }: BatterySceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const containerClass = cx(CONTAINER_BASE, heightClass ?? DEFAULT_HEIGHT);
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [inView, setInView] = useState(true);
   const [visible, setVisible] = useState(true);
@@ -104,18 +110,18 @@ export default function BatteryScene({
 
   if (webgl === false) {
     return (
-      <div ref={containerRef} className={CONTAINER}>
+      <div ref={containerRef} className={containerClass}>
         <GradientFallback note="WebGL unavailable - telemetry panels below stay live." />
       </div>
     );
   }
 
   if (webgl === null) {
-    return <div ref={containerRef} className={cx(CONTAINER, 'animate-pulse')} />;
+    return <div ref={containerRef} className={cx(containerClass, 'animate-pulse')} />;
   }
 
   return (
-    <div ref={containerRef} className={CONTAINER} style={{ touchAction: 'pan-y' }}>
+    <div ref={containerRef} className={containerClass} style={{ touchAction: 'pan-y' }}>
       <SceneErrorBoundary
         fallback={
           <GradientFallback note="3D renderer failed to start - telemetry panels below stay live." />

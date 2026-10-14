@@ -7,4 +7,10 @@
         <item name="android:navigationBarColor">@color/urja_bg</item>
     </style>
 
+    <!-- Black, barless window for the launch clip, so there is no light flash
+         between the launcher icon and the first video frame. -->
+    <style name="Theme.UrjaSplash" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
 </resources>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
+import { TelemetryProvider } from '@/components/providers/TelemetryProvider';
 import './globals.css';
 
 const display = Space_Grotesk({
@@ -33,7 +34,14 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
-      <body className="min-h-dvh bg-base font-display antialiased">{children}</body>
+      <body className="min-h-dvh bg-base font-display antialiased">
+        {/*
+          One poll for the whole app: every route reads this provider, so moving
+          between screens neither restarts the poll timer nor re-fetches the
+          channel, and the cards stay consistent with the detail screens.
+        */}
+        <TelemetryProvider>{children}</TelemetryProvider>
+      </body>
     </html>
   );
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Urja Sync</string>
+    <string name="intro_skip">skip &#8250;</string>
 
     <string name="settings_title">ThingSpeak channel</string>
     <string name="settings_intro">Connect your own ThingSpeak channel. The app reads it directly, so it works on any network with no server. Credentials are stored encrypted on this device only.</string>

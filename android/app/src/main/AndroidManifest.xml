@@ -14,17 +14,28 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.UrjaDashboard">
 
+        <!-- The launcher entry point: plays the intro clip if one has been added
+             to res/raw, then forwards to MainActivity. With no clip present it
+             forwards immediately, so the dashboard is never blocked. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode|density"
-            android:theme="@style/Theme.UrjaDashboard">
+            android:theme="@style/Theme.UrjaSplash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Not exported: only the splash screen launches it. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode|density"
+            android:theme="@style/Theme.UrjaDashboard" />
 
         <activity
             android:name=".SettingsActivity"
