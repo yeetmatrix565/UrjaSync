@@ -16,6 +16,7 @@ import { useTelemetryLerp } from '@/hooks/useTelemetryLerp';
 import { fmt, fmtInt, relTime } from '@/lib/format';
 import { POLL_INTERVAL_MS } from '@/lib/telemetry/constants';
 import type { Status } from '@/lib/telemetry/types';
+import { hasAnyValue } from '@/lib/telemetry/values';
 
 const MemoBatteryScene = memo(BatteryScene);
 const POLL_SECONDS = POLL_INTERVAL_MS / 1000;
@@ -26,13 +27,21 @@ interface StatDefinition {
   value: string;
   unit: string;
   color: string;
-  spark: number[];
+  spark: Array<number | null>;
   hint?: string;
 }
 
 export default function DashboardPage() {
-  const { latest, history, lastFetchedAt, error, loading, isDemo, refresh } =
-    useTelemetry();
+  const {
+    latest,
+    history,
+    lastFetchedAt,
+    error,
+    loading,
+    isDemo,
+    hasCredentials,
+    refresh,
+  } = useTelemetry();
   const reducedMotion = useReducedMotion();
   const { valuesRef, snapshot } = useTelemetryLerp(latest, reducedMotion);
   const now = useNow(1000);
@@ -69,77 +78,94 @@ export default function DashboardPage() {
   );
 
   const current = snapshot.currentA;
-  const currentDir = !Number.isFinite(current)
-    ? '\u2014'
-    : current > 0.02
-      ? 'discharging'
-      : current < -0.02
-        ? 'charging'
-        : 'idle';
-  const currentColor = !Number.isFinite(current)
-    ? '#22d3ee'
-    : current < -0.02
-      ? '#22d3ee'
+  const currentDir =
+    current === null || !Number.isFinite(current)
+      ? '\u2014'
       : current > 0.02
-        ? '#f97316'
-        : '#94a3b8';
+        ? 'discharging'
+        : current < -0.02
+          ? 'charging'
+          : 'idle';
+  const currentColor =
+    current === null || !Number.isFinite(current)
+      ? '#22d3ee'
+      : current < -0.02
+        ? '#22d3ee'
+        : current > 0.02
+          ? '#f97316'
+          : '#94a3b8';
 
-  const cards: StatDefinition[] = [
-    {
-      id: 'pack',
-      label: 'Pack voltage',
-      value: fmt(snapshot.packV, 2),
-      unit: 'V',
-      color: '#22d3ee',
-      spark: sparks.packV,
-      hint: `imbalance ${fmt(snapshot.imbalanceV, 3)} V`,
-    },
-    {
-      id: 'current',
-      label: 'Current',
-      value: fmt(snapshot.currentA, 2),
-      unit: 'A',
-      color: currentColor,
-      spark: sparks.currentA,
-      hint: currentDir,
-    },
-    {
-      id: 'power',
-      label: 'Power',
-      value: fmt(snapshot.powerW, 1),
-      unit: 'W',
-      color: '#a78bfa',
-      spark: sparks.powerW,
-      hint: 'packV x current',
-    },
-    {
-      id: 'temp',
-      label: 'Temperature',
-      value: fmt(snapshot.tempC, 1),
-      unit: '\u00b0C',
-      color: '#e5484d',
-      spark: sparks.tempC,
-      hint: 'field5',
-    },
-    {
-      id: 'soc',
-      label: 'SOC',
-      value: fmtInt(snapshot.soc),
-      unit: '%',
-      color: '#30d158',
-      spark: sparks.soc,
-      hint: 'state of charge',
-    },
-    {
-      id: 'soh',
-      label: 'SOH',
-      value: fmtInt(snapshot.soh),
-      unit: '%',
-      color: '#8b5cf6',
-      spark: sparks.soh,
-      hint: 'state of health',
-    },
+  // A card is only shown when the channel actually publishes that metric, so a
+  // basic pack gets a short, honest board instead of a row of dashes.
+  const candidates: Array<StatDefinition | null> = [
+    hasAnyValue(sparks.packV)
+      ? {
+          id: 'pack',
+          label: 'Pack voltage',
+          value: fmt(snapshot.packV, 2),
+          unit: 'V',
+          color: '#22d3ee',
+          spark: sparks.packV,
+          hint: `imbalance ${fmt(snapshot.imbalanceV, 3)} V`,
+        }
+      : null,
+    hasAnyValue(sparks.currentA)
+      ? {
+          id: 'current',
+          label: 'Current',
+          value: fmt(snapshot.currentA, 2),
+          unit: 'A',
+          color: currentColor,
+          spark: sparks.currentA,
+          hint: currentDir,
+        }
+      : null,
+    hasAnyValue(sparks.powerW)
+      ? {
+          id: 'power',
+          label: 'Power',
+          value: fmt(snapshot.powerW, 1),
+          unit: 'W',
+          color: '#a78bfa',
+          spark: sparks.powerW,
+          hint: 'packV x current',
+        }
+      : null,
+    hasAnyValue(sparks.tempC)
+      ? {
+          id: 'temp',
+          label: 'Temperature',
+          value: fmt(snapshot.tempC, 1),
+          unit: '\u00b0C',
+          color: '#e5484d',
+          spark: sparks.tempC,
+          hint: 'channel sensor',
+        }
+      : null,
+    hasAnyValue(sparks.soc)
+      ? {
+          id: 'soc',
+          label: 'SOC',
+          value: fmtInt(snapshot.soc),
+          unit: '%',
+          color: '#30d158',
+          spark: sparks.soc,
+          hint: 'state of charge',
+        }
+      : null,
+    hasAnyValue(sparks.soh)
+      ? {
+          id: 'soh',
+          label: 'SOH',
+          value: fmtInt(snapshot.soh),
+          unit: '%',
+          color: '#8b5cf6',
+          spark: sparks.soh,
+          hint: 'state of health',
+        }
+      : null,
   ];
+  const cards = candidates.filter((card): card is StatDefinition => card !== null);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-3 pb-24 pt-3 sm:px-5 sm:pt-5">
@@ -153,6 +179,7 @@ export default function DashboardPage() {
         status={status}
         agoLabel={agoLabel}
         isDemo={isDemo}
+        connected={hasCredentials}
         loading={loading && !latest}
         onRefresh={refresh}
       />
@@ -161,6 +188,7 @@ export default function DashboardPage() {
         <MemoBatteryScene
           valuesRef={valuesRef}
           alerts={alerts}
+          cellCount={snapshot.cells.length}
           selectedCell={selectedCell}
           onSelectCell={setSelectedCell}
           reducedMotion={reducedMotion}
@@ -173,22 +201,24 @@ export default function DashboardPage() {
         </p>
       ) : null}
 
-      <section className="mt-4">
-        <SectionHeading title="Telemetry" hint={`poll ${POLL_SECONDS}s · lerped`} />
-        <div className="no-scrollbar snap-row -mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:px-0 lg:grid-cols-6">
-          {cards.map((card) => (
-            <StatCard
-              key={card.id}
-              label={card.label}
-              value={card.value}
-              unit={card.unit}
-              color={card.color}
-              spark={card.spark}
-              hint={card.hint}
-            />
-          ))}
-        </div>
-      </section>
+      {cards.length > 0 ? (
+        <section className="mt-4">
+          <SectionHeading title="Telemetry" hint={`poll ${POLL_SECONDS}s · lerped`} />
+          <div className="no-scrollbar snap-row -mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:px-0 lg:grid-cols-6">
+            {cards.map((card) => (
+              <StatCard
+                key={card.id}
+                label={card.label}
+                value={card.value}
+                unit={card.unit}
+                color={card.color}
+                spark={card.spark}
+                hint={card.hint}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-4">
         <SectionHeading title="Cells" hint="tap to focus" />

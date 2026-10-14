@@ -3,41 +3,45 @@ import { PALETTE } from './createPackScene';
 
 export interface ParticleStream {
   mesh: THREE.InstancedMesh;
-  update(delta: number, currentA: number, reduced: boolean, elapsed: number): void;
+  update(delta: number, currentA: number | null, reduced: boolean, elapsed: number): void;
   dispose(): void;
 }
 
 const COUNT = 150;
+const BASE_SCALE = 1;
 
 function mod1(x: number): number {
   return ((x % 1) + 1) % 1;
 }
 
-/** Cable loop that wraps around the pack. */
-export function createCableCurve(): THREE.CatmullRomCurve3 {
+/** Cable loop that wraps around the pack; `scale` widens it for larger packs. */
+export function createCableCurve(scale = BASE_SCALE): THREE.CatmullRomCurve3 {
+  const s = Math.max(scale, 0.6);
+  const points: Array<[number, number, number]> = [
+    [-1.55, -1.5, 0.85],
+    [-2.0, -0.3, 0.6],
+    [-1.6, 0.9, 0.85],
+    [-0.7, 1.7, 0.5],
+    [0.7, 1.7, 0.5],
+    [1.6, 0.9, 0.85],
+    [2.0, -0.3, 0.6],
+    [1.55, -1.5, 0.85],
+  ];
+
   return new THREE.CatmullRomCurve3(
-    [
-      new THREE.Vector3(-1.55, -1.5, 0.85),
-      new THREE.Vector3(-2.0, -0.3, 0.6),
-      new THREE.Vector3(-1.6, 0.9, 0.85),
-      new THREE.Vector3(-0.7, 1.7, 0.5),
-      new THREE.Vector3(0.7, 1.7, 0.5),
-      new THREE.Vector3(1.6, 0.9, 0.85),
-      new THREE.Vector3(2.0, -0.3, 0.6),
-      new THREE.Vector3(1.55, -1.5, 0.85),
-    ],
+    points.map(([x, y, z]) => new THREE.Vector3(x * s, y, z)),
     true,
     'catmullrom',
     0.5,
   );
 }
 
-export function createCableGeometry(): THREE.TubeGeometry {
-  return new THREE.TubeGeometry(createCableCurve(), 160, 0.022, 8, true);
+export function createCableGeometry(scale = BASE_SCALE): THREE.TubeGeometry {
+  return new THREE.TubeGeometry(createCableCurve(scale), 160, 0.022, 8, true);
 }
 
-export function createParticleStream(count = COUNT): ParticleStream {
-  const curve = createCableCurve();
+export function createParticleStream(count = COUNT, scale = BASE_SCALE): ParticleStream {
+  const curve = createCableCurve(scale);
   const geometry = new THREE.SphereGeometry(0.024, 6, 6);
   const material = new THREE.MeshBasicMaterial({
     transparent: true,
@@ -65,12 +69,13 @@ export function createParticleStream(count = COUNT): ParticleStream {
 
   const update = (
     delta: number,
-    currentA: number,
+    currentA: number | null,
     reduced: boolean,
     elapsed: number,
   ): void => {
-    const mag = Math.abs(currentA);
-    const hasFlow = Number.isFinite(currentA) && mag > 0.02;
+    // A channel may not publish current at all - then there is simply no flow.
+    const mag = currentA === null ? 0 : Math.abs(currentA);
+    const hasFlow = currentA !== null && Number.isFinite(currentA) && mag > 0.02;
 
     const targetOpacity =
       reduced || !hasFlow ? 0 : THREE.MathUtils.clamp(mag * 0.85, 0.08, 0.95);
@@ -82,7 +87,7 @@ export function createParticleStream(count = COUNT): ParticleStream {
     }
     mesh.visible = true;
 
-    const dir = currentA >= 0 ? 1 : -1;
+    const dir = currentA === null || currentA >= 0 ? 1 : -1;
     const speed = Math.min(0.4, 0.03 + mag * 0.1);
     head = mod1(head + dir * speed * delta);
 

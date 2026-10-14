@@ -1,0 +1,128 @@
+import { detectMapping, extractFieldLabels } from './detect';
+import { buildMockRaw } from './mock';
+import { parseChannel } from './parse';
+import type {
+  ChannelCredentials,
+  FieldMapping,
+  Scenario,
+  TelemetryResponse,
+} from './types';
+
+export interface TelemetryFetchResult {
+  response: TelemetryResponse;
+  /** True when the payload is synthetic - no credentials, or a `?scenario=` override. */
+  demo: boolean;
+  /** Mapping actually used, so the UI can show what was detected. */
+  mapping: FieldMapping;
+  /** True when the mapping came from the channel labels rather than a fallback. */
+  inferred: boolean;
+}
+
+export interface FetchOptions {
+  scenario?: Scenario | null;
+  signal?: AbortSignal;
+  /** User override; skips label detection entirely when present. */
+  mapping?: FieldMapping | null;
+}
+
+const THINGSPEAK_BASE = 'https://api.thingspeak.com';
+const FEED_COUNT = 100;
+const UPSTREAM_TIMEOUT_MS = 8_000;
+const EMPTY_RESPONSE: TelemetryResponse = { latest: null, history: [] };
+
+const SCENARIOS: readonly Scenario[] = [
+  'normal',
+  'alert',
+  'stale',
+  'empty',
+  'malformed',
+  'basic',
+];
+
+export function asScenario(value: string | null): Scenario | null {
+  return value !== null && (SCENARIOS as readonly string[]).includes(value)
+    ? (value as Scenario)
+    : null;
+}
+
+export function feedsUrl(credentials: ChannelCredentials): string {
+  return (
+    `${THINGSPEAK_BASE}/channels/${encodeURIComponent(credentials.channelId)}` +
+    `/feeds.json?api_key=${encodeURIComponent(credentials.readApiKey)}` +
+    `&results=${FEED_COUNT}`
+  );
+}
+
+/** Detect the field layout from the payload unless the user overrode it. */
+function interpret(
+  raw: unknown,
+  override: FieldMapping | null | undefined,
+): {
+  response: TelemetryResponse;
+  mapping: FieldMapping;
+  inferred: boolean;
+} {
+  if (override) {
+    return { response: parseChannel(raw, override), mapping: override, inferred: false };
+  }
+
+  const mapping = detectMapping(extractFieldLabels(raw));
+  return { response: parseChannel(raw, mapping), mapping, inferred: true };
+}
+
+/**
+ * Reads telemetry for the configured channel straight from ThingSpeak.
+ *
+ * ThingSpeak answers with `Access-Control-Allow-Origin: *`, so this works from a
+ * browser and from the app's WebView alike with no proxy in between - which is
+ * what lets the app run standalone.
+ *
+ * Only a caller-initiated abort is re-thrown; an unreachable upstream is a
+ * normal OFFLINE state rather than an error the UI must special-case.
+ */
+export async function fetchTelemetry(
+  credentials: ChannelCredentials | null,
+  options: FetchOptions = {},
+): Promise<TelemetryFetchResult> {
+  if (options.scenario) {
+    return { ...interpret(buildMockRaw(options.scenario), options.mapping), demo: true };
+  }
+  if (!credentials) {
+    return { ...interpret(buildMockRaw('normal'), options.mapping), demo: true };
+  }
+
+  const controller = new AbortController();
+  const abortFromCaller = (): void => controller.abort();
+  options.signal?.addEventListener('abort', abortFromCaller);
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(feedsUrl(credentials), {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      return {
+        response: EMPTY_RESPONSE,
+        demo: false,
+        mapping: options.mapping ?? detectMapping([]),
+        inferred: false,
+      };
+    }
+
+    const raw: unknown = await res.json();
+    return { ...interpret(raw, options.mapping), demo: false };
+  } catch (err) {
+    if (options.signal?.aborted) throw err;
+    return {
+      response: EMPTY_RESPONSE,
+      demo: false,
+      mapping: options.mapping ?? detectMapping([]),
+      inferred: false,
+    };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abortFromCaller);
+  }
+}

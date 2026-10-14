@@ -12,6 +12,8 @@ import { Pack } from './scene/Pack';
 export interface BatterySceneProps {
   valuesRef: MutableRefObject<LerpValues>;
   alerts: Alert[];
+  /** Number of cells the channel publishes; 0 renders an empty enclosure. */
+  cellCount: number;
   selectedCell: number | null;
   onSelectCell: (index: number | null) => void;
   reducedMotion: boolean;
@@ -57,6 +59,7 @@ function GradientFallback({ note }: { note: string }) {
 export default function BatteryScene({
   valuesRef,
   alerts,
+  cellCount,
   selectedCell,
   onSelectCell,
   reducedMotion,
@@ -93,7 +96,10 @@ export default function BatteryScene({
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  const cellAlerts = useMemo(() => cellAlertFlags(alerts), [alerts]);
+  const cellAlerts = useMemo(
+    () => cellAlertFlags(alerts, cellCount),
+    [alerts, cellCount],
+  );
   const active = inView && visible;
 
   if (webgl === false) {
@@ -125,6 +131,7 @@ export default function BatteryScene({
           <Pack
             valuesRef={valuesRef}
             cellAlerts={cellAlerts}
+            cellCount={cellCount}
             anyAlert={alerts.length > 0}
             selectedCell={selectedCell}
             onSelectCell={onSelectCell}

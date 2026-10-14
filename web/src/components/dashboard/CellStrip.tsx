@@ -4,28 +4,42 @@ import { clamp, cx, fmt } from '@/lib/format';
 import { voltColor } from '@/lib/colors';
 import { VOLT_USABLE } from '@/lib/telemetry/constants';
 import { alertedCellIndexes } from '@/lib/telemetry/rules';
-import type { Alert } from '@/lib/telemetry/types';
+import type { Alert, CellVoltages } from '@/lib/telemetry/types';
 
 export interface CellStripProps {
-  cells: [number, number, number];
+  cells: CellVoltages;
   alerts: Alert[];
   selected: number | null;
   onSelect: (index: number | null) => void;
 }
 
+/**
+ * Renders however many cells the channel publishes - a 1S pack shows one card,
+ * an 8S pack shows eight - instead of assuming three.
+ */
 export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps) {
   const flagged = new Set(alertedCellIndexes(alerts));
   const span = VOLT_USABLE.max - VOLT_USABLE.min;
 
+  if (cells.length === 0) {
+    return (
+      <p className="glass p-4 text-center font-mono text-[11px] text-white/35">
+        no cell voltages published by this channel
+      </p>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+    <div
+      className="grid gap-2 sm:gap-3"
+      style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
+    >
       {cells.map((v, i) => {
-        const pct = Number.isFinite(v)
-          ? clamp((v - VOLT_USABLE.min) / span, 0, 1) * 100
-          : 0;
+        const hasValue = v !== null && Number.isFinite(v);
+        const pct = hasValue ? clamp((v - VOLT_USABLE.min) / span, 0, 1) * 100 : 0;
         const hasAlert = flagged.has(i);
         const isActive = selected === i;
-        const color = hasAlert ? '#e5484d' : voltColor(v);
+        const color = hasAlert ? '#e5484d' : voltColor(v ?? NaN);
 
         return (
           <button
@@ -33,7 +47,7 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
             type="button"
             onClick={() => onSelect(isActive ? null : i)}
             className={cx(
-              'glass flex flex-col gap-2 p-3 text-left transition active:scale-[0.98]',
+              'glass flex flex-col gap-2 p-2.5 text-left transition active:scale-[0.98] sm:p-3',
               isActive && 'border-cyan-300/50 ring-1 ring-cyan-300/30',
               hasAlert && !isActive && 'border-brand-red/40',
             )}
@@ -50,7 +64,7 @@ export function CellStrip({ cells, alerts, selected, onSelect }: CellStripProps)
               )}
             </div>
 
-            <span className="num font-mono text-lg leading-none text-white">
+            <span className="num font-mono text-base leading-none text-white sm:text-lg">
               {fmt(v, 2)}
               <span className="ml-0.5 text-[10px] text-white/40">V</span>
             </span>

@@ -3,7 +3,7 @@
 import { memo, useId } from 'react';
 
 export interface SparklineProps {
-  data: number[];
+  data: Array<number | null>;
   color?: string;
   width?: number;
   height?: number;
@@ -16,7 +16,7 @@ function SparklineBase({
   height = 30,
 }: SparklineProps) {
   const gradientId = useId();
-  const finite = data.filter((v) => Number.isFinite(v));
+  const finite = data.filter((v): v is number => v !== null && Number.isFinite(v));
 
   if (finite.length < 2) {
     return (

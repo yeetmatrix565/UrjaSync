@@ -7,7 +7,7 @@ export interface StatCardProps {
   value: string;
   unit: string;
   color?: string;
-  spark?: number[];
+  spark?: Array<number | null>;
   hint?: string;
 }
 

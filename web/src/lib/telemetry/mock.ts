@@ -29,7 +29,8 @@ function seeded(seed: number): () => number {
   };
 }
 
-const FIELDS: Record<FieldKey, string> = {
+/** Channel labels exactly as the reference UrjaSync firmware sets them. */
+const URJA_FIELDS: Record<FieldKey, string> = {
   field1: 'Pack Voltage (V)',
   field2: 'Cell 1 (V)',
   field3: 'Cell 2 (V)',
@@ -38,6 +39,19 @@ const FIELDS: Record<FieldKey, string> = {
   field6: 'Current (A)',
   field7: 'SOC (%)',
   field8: 'SOH (%)',
+};
+
+/**
+ * A bare-minimum 2S pack: two cells and a current shunt, no temperature, no SOC,
+ * no SOH and no pack total. Exercises label detection, variable cell count and
+ * the derived pack voltage.
+ */
+const BASIC_FIELDS: Partial<Record<FieldKey, string>> = {
+  field1: 'Cell 1 Voltage (V)',
+  field2: 'Cell 2 Voltage (V)',
+  field3: 'Current (A)',
+  field4: '',
+  field5: '',
 };
 
 const COUNT = 100;
@@ -93,6 +107,33 @@ function buildNormal(newestAgeMs = 0): RawFeed[] {
   return feeds;
 }
 
+/** Two cells plus current; every other field is deliberately null. */
+function buildBasic(newestAgeMs = 0): RawFeed[] {
+  const now = Date.now();
+  const feeds: RawFeed[] = [];
+
+  for (let i = 0; i < COUNT; i++) {
+    const ts = now - newestAgeMs - (COUNT - 1 - i) * STEP_MS;
+    const tSec = ts / 1000;
+    const j = jitter(i);
+
+    feeds.push({
+      created_at: new Date(ts).toISOString(),
+      entry_id: 2_000_000 + i,
+      field1: str(3.92 + j.a, 3),
+      field2: str(3.88 + j.b, 3),
+      field3: str(0.6 + 0.5 * Math.sin(tSec / 120), 3),
+      field4: null,
+      field5: null,
+      field6: null,
+      field7: null,
+      field8: null,
+    });
+  }
+
+  return feeds;
+}
+
 function buildAlert(): RawFeed[] {
   const feeds = buildNormal();
   const hot = (i: number): boolean => i > COUNT - 12;
@@ -111,43 +152,51 @@ function buildAlert(): RawFeed[] {
   return feeds;
 }
 
+/**
+ * Every field unusable in every row. The parser is deliberately forgiving now,
+ * so this scenario proves the "nothing readable" path rather than schema
+ * rejection: the dashboard must degrade to OFFLINE instead of throwing.
+ */
 function buildMalformed(): RawFeed[] {
   const feeds = buildNormal();
-  for (let i = 0; i < feeds.length; i++) {
-    const f = feeds[i]!;
-    if (i % 3 === 0) f.field2 = null;
-    if (i % 3 === 1) f.field5 = 'abc';
-    if (i % 3 === 2) {
-      f.field1 = null;
-      f.field7 = '';
-    }
+  for (const f of feeds) {
+    f.field1 = null;
+    f.field2 = 'abc';
+    f.field3 = '';
+    f.field4 = null;
+    f.field5 = 'not-a-number';
+    f.field6 = null;
+    f.field7 = null;
+    f.field8 = null;
   }
   return feeds;
 }
 
-function wrap(feeds: RawFeed[]): RawChannel {
+function wrap(feeds: RawFeed[], labels: Partial<Record<FieldKey, string>>): RawChannel {
   return {
-    channel: { id: 0, name: 'Urja Sync (demo)', ...FIELDS },
+    channel: { id: 0, name: 'Urja Sync (demo)', ...labels },
     feeds,
   };
 }
 
 /**
  * Produces a raw, ThingSpeak-shaped payload (fields as strings / null) so demo
- * data travels through the exact same zod parser as live data.
+ * data travels through the exact same zod parser and label detector as live data.
  */
 export function buildMockRaw(scenario: Scenario = 'normal'): unknown {
   switch (scenario) {
     case 'empty':
-      return wrap([]);
+      return wrap([], URJA_FIELDS);
     case 'malformed':
-      return wrap(buildMalformed());
+      return wrap(buildMalformed(), URJA_FIELDS);
     case 'stale':
-      return wrap(buildNormal(150_000));
+      return wrap(buildNormal(150_000), URJA_FIELDS);
     case 'alert':
-      return wrap(buildAlert());
+      return wrap(buildAlert(), URJA_FIELDS);
+    case 'basic':
+      return wrap(buildBasic(), BASIC_FIELDS);
     case 'normal':
     default:
-      return wrap(buildNormal());
+      return wrap(buildNormal(), URJA_FIELDS);
   }
 }

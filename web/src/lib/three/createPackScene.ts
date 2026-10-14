@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { voltColorRGB, voltIntensity } from '@/lib/colors';
 
-export const CELL_X = [-0.78, 0, 0.78] as const;
 export const CELL_RADIUS = 0.27;
 export const CELL_HEIGHT = 2.1;
 export const CORE_RADIUS = 0.15;
 
+/** Centre-to-centre gap between adjacent cells. */
+const CELL_SPACING = CELL_RADIUS * 2 + 0.24;
+
+const MIN_PACK_WIDTH = 1.7;
+
 export const PACK = {
-  width: 2.7,
   height: 2.55,
   depth: 1.5,
   wall: 0.09,
@@ -25,6 +28,40 @@ export const PALETTE = {
   red: '#e5484d',
 } as const;
 
+/** X offsets for `count` cells, centred on the origin. */
+export function cellPositions(count: number): number[] {
+  if (count <= 0) return [];
+  const span = (count - 1) * CELL_SPACING;
+  return Array.from({ length: count }, (_, i) => -span / 2 + i * CELL_SPACING);
+}
+
+/** Enclosure sized to however many cells the channel publishes. */
+export function packDimensions(count: number): {
+  width: number;
+  height: number;
+  depth: number;
+  wall: number;
+} {
+  const n = Math.max(count, 1);
+  const width = Math.max(MIN_PACK_WIDTH, (n - 1) * CELL_SPACING + CELL_RADIUS * 2 + 0.5);
+  return { width, height: PACK.height, depth: PACK.depth, wall: PACK.wall };
+}
+
+export function socRingRadius(count: number): number {
+  return Math.max(2.0, packDimensions(count).width / 2 + 0.6);
+}
+
+/** World radius the camera must keep in frame (ring, SOH crystal, labels). */
+export function fitRadius(count: number): number {
+  const sohReach = packDimensions(count).width / 2 + 0.9;
+  return Math.max(socRingRadius(count), sohReach) + 0.35;
+}
+
+/** Where the SOH crystal sits relative to the pack. */
+export function sohPosition(count: number): [number, number, number] {
+  return [packDimensions(count).width / 2 + 0.55, 0.95, 0.12];
+}
+
 export interface VoltageVisual {
   r: number;
   g: number;
@@ -34,9 +71,10 @@ export interface VoltageVisual {
 }
 
 /** Pure-number visual mapping for a cell voltage (allocation-free for useFrame). */
-export function voltageVisual(v: number): VoltageVisual {
-  const [r, g, b] = voltColorRGB(v);
-  const intensity = voltIntensity(v);
+export function voltageVisual(v: number | null): VoltageVisual {
+  const value = v ?? NaN;
+  const [r, g, b] = voltColorRGB(value);
+  const intensity = voltIntensity(value);
   return { r, g, b, intensity, emissiveIntensity: 0.4 + intensity * 2.4 };
 }
 
@@ -103,7 +141,7 @@ const SOC_FRAG = /* glsl */ `
 
 export interface SocRingHandles {
   material: THREE.ShaderMaterial;
-  setSoc(soc: number, pulse: number): void;
+  setSoc(soc: number | null, pulse: number): void;
 }
 
 /** Full torus + arc-fill shader (uniform driven, no per-frame geometry rebuild). */
@@ -125,8 +163,8 @@ export function createSocRingMaterial(): SocRingHandles {
 
   return {
     material,
-    setSoc(soc: number, pulse: number) {
-      material.uniforms.uSoc!.value = Number.isFinite(soc) ? soc : 0;
+    setSoc(soc: number | null, pulse: number) {
+      material.uniforms.uSoc!.value = soc !== null && Number.isFinite(soc) ? soc : 0;
       material.uniforms.uPulse!.value = pulse;
     },
   };

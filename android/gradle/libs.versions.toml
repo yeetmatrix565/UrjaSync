@@ -1,7 +1,9 @@
-# Only what the :dashboard module uses. The stock template's AndroidX/Material
-# entries were dropped along with the android-app module.
 [versions]
 agp = "9.3.3"
+webkit = "1.11.0"
+
+[libraries]
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -16,13 +16,16 @@ import type { LerpValues } from '@/hooks/useTelemetryLerp';
 import {
   CELL_HEIGHT,
   CELL_RADIUS,
-  CELL_X,
   CORE_RADIUS,
-  PACK,
   PALETTE,
+  cellPositions,
   createDustField,
   createSocRingMaterial,
+  fitRadius,
   getGlowTexture,
+  packDimensions,
+  socRingRadius,
+  sohPosition,
   voltageVisual,
 } from '@/lib/three/createPackScene';
 import { createCableGeometry, createParticleStream } from '@/lib/three/currentParticles';
@@ -30,17 +33,19 @@ import { createCableGeometry, createParticleStream } from '@/lib/three/currentPa
 export interface PackProps {
   valuesRef: MutableRefObject<LerpValues>;
   cellAlerts: boolean[];
+  /** How many cells the channel publishes; drives every dimension below. */
+  cellCount: number;
   anyAlert: boolean;
   selectedCell: number | null;
   onSelectCell: (index: number | null) => void;
   reducedMotion: boolean;
 }
 
-/** World radius the camera must keep in frame (SOC ring + SOH crystal + labels). */
-const FIT_RADIUS = 2.4;
-
 /** Auto-rotate resumes this long after the user stops dragging. */
 const ROTATE_RESUME_MS = 3500;
+
+/** The cable loop was authored for a three-cell pack; scale it from that. */
+const REFERENCE_PACK_WIDTH = 2.6;
 
 const METAL = {
   color: PALETTE.metal,
@@ -53,10 +58,12 @@ const METAL = {
 /**
  * "The Pack": enclosure, cells, rings and cable, driven imperatively from
  * `useFrame` straight off the lerped telemetry ref - no per-frame React work.
+ * Everything is sized from `cellCount`, so a 2S pack looks like a 2S pack.
  */
 export function Pack({
   valuesRef,
   cellAlerts,
+  cellCount,
   anyAlert,
   selectedCell,
   onSelectCell,
@@ -66,15 +73,23 @@ export function Pack({
   const coreRefs = useRef<(THREE.Mesh | null)[]>([]);
   const glowRefs = useRef<(THREE.Sprite | null)[]>([]);
   const sohRef = useRef<THREE.Mesh>(null);
+  const sohGroupRef = useRef<THREE.Group>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
   const dustRef = useRef<THREE.Points>(null);
   const rimRef = useRef<THREE.PointLight>(null);
 
   const [autoRotate, setAutoRotate] = useState(!reducedMotion);
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const positions = useMemo(() => cellPositions(cellCount), [cellCount]);
+  const dims = useMemo(() => packDimensions(cellCount), [cellCount]);
+  const ringRadius = useMemo(() => socRingRadius(cellCount), [cellCount]);
+  const sohAt = useMemo(() => sohPosition(cellCount), [cellCount]);
+  const cableScale = dims.width / REFERENCE_PACK_WIDTH;
+
   const socRing = useMemo(() => createSocRingMaterial(), []);
-  const stream = useMemo(() => createParticleStream(), []);
-  const cableGeo = useMemo(() => createCableGeometry(), []);
+  const stream = useMemo(() => createParticleStream(undefined, cableScale), [cableScale]);
+  const cableGeo = useMemo(() => createCableGeometry(cableScale), [cableScale]);
   const dustGeo = useMemo(() => createDustField(220), []);
   const glowTex = useMemo(() => getGlowTexture(), []);
 
@@ -90,17 +105,16 @@ export function Pack({
     setAutoRotate(!reducedMotion);
   }, [reducedMotion]);
 
-  // Frame the pack by whichever axis is tighter. The phone app runs full-screen
-  // (taller than a browser viewport), so a fixed distance would crop the ring.
+  // Frame the pack by whichever axis is tighter, and pull back for wide packs.
+  // The phone app runs full-screen (taller than a browser viewport), so a fixed
+  // distance would crop the ring.
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     const vFov = (cam.fov * Math.PI) / 180;
     const aspect = size.width / Math.max(1, size.height);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-    const dist = Math.max(
-      FIT_RADIUS / Math.tan(vFov / 2),
-      FIT_RADIUS / Math.tan(hFov / 2),
-    );
+    const radius = fitRadius(cellCount);
+    const dist = Math.max(radius / Math.tan(vFov / 2), radius / Math.tan(hFov / 2));
 
     cam.position.setLength(dist);
     cam.updateProjectionMatrix();
@@ -111,7 +125,7 @@ export function Pack({
       controls.maxDistance = dist * 1.9;
       controls.update();
     }
-  }, [camera, size.width, size.height]);
+  }, [camera, size.width, size.height, cellCount]);
 
   useEffect(
     () => () => {
@@ -135,10 +149,10 @@ export function Pack({
     const t = state.clock.elapsedTime;
     const v = valuesRef.current;
 
-    for (let i = 0; i < CELL_X.length; i++) {
+    for (let i = 0; i < positions.length; i++) {
       const hasAlert = cellAlerts[i] === true;
       const pulse = hasAlert ? 0.5 + 0.5 * Math.sin(t * 7) : 0;
-      const visual = voltageVisual(v.cells[i] ?? NaN);
+      const visual = voltageVisual(v.cells[i] ?? null);
 
       const core = coreRefs.current[i];
       if (core) {
@@ -169,12 +183,19 @@ export function Pack({
       }
     }
 
+    // Metrics the channel does not publish have no hologram to show.
+    if (ringRef.current) ringRef.current.visible = v.soc !== null;
+    if (sohGroupRef.current) sohGroupRef.current.visible = v.soh !== null;
+
     socRing.setSoc(v.soc, 0.1 + 0.08 * Math.sin(t * 1.6));
 
     const sohMesh = sohRef.current;
     if (sohMesh) {
       const mat = sohMesh.material as THREE.MeshStandardMaterial;
-      const s = Number.isFinite(v.soh) ? THREE.MathUtils.clamp(v.soh / 100, 0, 1) : 0;
+      const s =
+        v.soh !== null && Number.isFinite(v.soh)
+          ? THREE.MathUtils.clamp(v.soh / 100, 0, 1)
+          : 0;
       mat.emissiveIntensity += (0.3 + s * 2.2 - mat.emissiveIntensity) * 0.1;
       mat.opacity += (0.22 + s * 0.66 - mat.opacity) * 0.1;
       sohMesh.rotation.y = t * 0.6;
@@ -196,7 +217,7 @@ export function Pack({
     const controls = controlsRef.current;
     if (controls) {
       if (selectedCell !== null) {
-        focusTarget.set(CELL_X[selectedCell] ?? 0, 0.15, 0);
+        focusTarget.set(positions[selectedCell] ?? 0, 0.15, 0);
       } else {
         focusTarget.copy(defaultTarget);
       }
@@ -205,7 +226,7 @@ export function Pack({
     }
   });
 
-  const { width: W, height: H, depth: D, wall } = PACK;
+  const { width: W, height: H, depth: D, wall } = dims;
 
   return (
     <>
@@ -254,8 +275,8 @@ export function Pack({
         </mesh>
       </group>
 
-      {/* Cells */}
-      {CELL_X.map((x, i) => (
+      {/* Cells - one per published cell voltage */}
+      {positions.map((x, i) => (
         <group key={i} position={[x, 0, 0]}>
           <mesh
             onClick={(e) => {
@@ -353,13 +374,17 @@ export function Pack({
       <primitive object={stream.mesh} />
 
       {/* SOC hologram ring */}
-      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[0, -0.02, 0]}>
-        <torusGeometry args={[1.98, 0.05, 16, 160]} />
+      <mesh
+        ref={ringRef}
+        rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+        position={[0, -0.02, 0]}
+      >
+        <torusGeometry args={[ringRadius, 0.05, 16, 160]} />
         <primitive object={socRing.material} attach="material" />
       </mesh>
 
       {/* SOH crystal */}
-      <group position={[1.78, 0.95, 0.12]}>
+      <group ref={sohGroupRef} position={sohAt}>
         <mesh ref={sohRef}>
           <octahedronGeometry args={[0.32, 0]} />
           <meshStandardMaterial
@@ -408,7 +433,7 @@ export function Pack({
         enableDamping
         dampingFactor={0.08}
         minDistance={4.4}
-        maxDistance={9.5}
+        maxDistance={14}
         minPolarAngle={0.75}
         maxPolarAngle={2.25}
         onStart={() => {

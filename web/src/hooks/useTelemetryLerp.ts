@@ -1,29 +1,33 @@
 'use client';
 
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import type { Telemetry } from '@/lib/telemetry/types';
+import type { CellVoltages, Telemetry } from '@/lib/telemetry/types';
 
+/**
+ * Mirrors Telemetry but keeps "not published" distinguishable from zero. The 3D
+ * scene reads this ref directly; the 2D panels consume the low-frequency snapshot.
+ */
 export interface LerpValues {
-  packV: number;
-  cells: [number, number, number];
-  tempC: number;
-  currentA: number;
-  powerW: number;
-  soc: number;
-  soh: number;
-  imbalanceV: number;
+  packV: number | null;
+  cells: CellVoltages;
+  tempC: number | null;
+  currentA: number | null;
+  powerW: number | null;
+  soc: number | null;
+  soh: number | null;
+  imbalanceV: number | null;
 }
 
 function blank(): LerpValues {
   return {
-    packV: NaN,
-    cells: [NaN, NaN, NaN],
-    tempC: NaN,
-    currentA: NaN,
-    powerW: NaN,
-    soc: NaN,
-    soh: NaN,
-    imbalanceV: NaN,
+    packV: null,
+    cells: [],
+    tempC: null,
+    currentA: null,
+    powerW: null,
+    soc: null,
+    soh: null,
+    imbalanceV: null,
   };
 }
 
@@ -31,7 +35,7 @@ function toValues(t: Telemetry | null): LerpValues {
   if (!t) return blank();
   return {
     packV: t.packV,
-    cells: [t.cells[0], t.cells[1], t.cells[2]],
+    cells: [...t.cells],
     tempC: t.tempC,
     currentA: t.currentA,
     powerW: t.powerW,
@@ -41,15 +45,21 @@ function toValues(t: Telemetry | null): LerpValues {
   };
 }
 
-/** NaN target means "no data" -> keep showing an em dash. */
-function approach(cur: number, tgt: number, k: number): number {
-  if (!Number.isFinite(tgt)) return NaN;
-  if (!Number.isFinite(cur)) return tgt;
+/** A null target means "not published" and keeps the dash on screen. */
+function approach(cur: number | null, tgt: number | null, k: number): number | null {
+  if (tgt === null || !Number.isFinite(tgt)) return null;
+  if (cur === null || !Number.isFinite(cur)) return tgt;
   return cur + (tgt - cur) * k;
 }
 
+/** Cell counts only change when the mapping does, so snapping is fine there. */
+function approachCells(cur: CellVoltages, tgt: CellVoltages, k: number): CellVoltages {
+  if (cur.length !== tgt.length) return [...tgt];
+  return tgt.map((target, i) => approach(cur[i] ?? null, target, k));
+}
+
 function clone(v: LerpValues): LerpValues {
-  return { ...v, cells: [v.cells[0], v.cells[1], v.cells[2]] };
+  return { ...v, cells: [...v.cells] };
 }
 
 const SPEED = 6;
@@ -98,11 +108,7 @@ export function useTelemetryLerp(
       cur.soc = approach(cur.soc, tgt.soc, k);
       cur.soh = approach(cur.soh, tgt.soh, k);
       cur.imbalanceV = approach(cur.imbalanceV, tgt.imbalanceV, k);
-      cur.cells = [
-        approach(cur.cells[0], tgt.cells[0], k),
-        approach(cur.cells[1], tgt.cells[1], k),
-        approach(cur.cells[2], tgt.cells[2], k),
-      ];
+      cur.cells = approachCells(cur.cells, tgt.cells, k);
 
       acc += dt;
       if (acc >= SNAPSHOT_MS) {

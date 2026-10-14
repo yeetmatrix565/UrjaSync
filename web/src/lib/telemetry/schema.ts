@@ -1,40 +1,43 @@
 import { z } from 'zod';
 
 /**
- * ThingSpeak returns every field as a STRING or null. We accept a numeric
- * string or a number, and reject null / empty / non-numeric / non-finite, so a
- * malformed value can never surface as NaN.
+ * ThingSpeak sends every field as a string, or null/absent when the channel has
+ * nothing to report.
+ *
+ * `toNumberOrNull` is deliberately total: a field that is missing, null, empty
+ * or unparseable becomes null instead of rejecting the whole feed. Whether a
+ * feed is *usable* is a question for the field mapping in `parse.ts`, not this
+ * module - a 2S pack that publishes no SOH is perfectly valid.
  */
-export const numeric = z
-  .union([
-    z
-      .string()
-      .trim()
-      .min(1)
-      .transform((s) => Number(s)),
-    z.number(),
-  ])
-  .pipe(z.number().finite());
+export function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+const field = z.unknown().transform(toNumberOrNull);
 
 export const feedSchema = z.object({
   created_at: z.string(),
   entry_id: z.union([z.number(), z.string()]).optional(),
-  field1: numeric,
-  field2: numeric,
-  field3: numeric,
-  field4: numeric,
-  field5: numeric,
-  field6: numeric,
-  field7: numeric,
-  field8: numeric,
+  field1: field,
+  field2: field,
+  field3: field,
+  field4: field,
+  field5: field,
+  field6: field,
+  field7: field,
+  field8: field,
 });
 
 export type ParsedFeed = z.infer<typeof feedSchema>;
 
-/**
- * Only `feeds` is inspected; channel metadata is irrelevant to the dashboard
- * and unknown extra keys are stripped by zod.
- */
+/** Only `feeds` is inspected here; channel metadata feeds the label detector. */
 export const channelResponseSchema = z.object({
   feeds: z.array(z.unknown()).optional(),
 });

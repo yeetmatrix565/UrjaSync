@@ -1,22 +1,16 @@
 /**
- * Deliberately no Content-Security-Policy here: Next injects inline styles and
- * the 3D scene relies on blob/worker URLs, so a naive CSP silently breaks the
- * app. It needs its own tested change rather than a guess.
+ * The dashboard ships as a fully static bundle: it is served from a static host
+ * or bundled into the Android app's assets. There is no server, so server-only
+ * features (headers(), route handlers) are intentionally absent - a static host
+ * or CDN is responsible for security headers.
+ *
+ * @type {import('next').NextConfig}
  */
-const SECURITY_HEADERS = [
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-];
-
-/** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
+  trailingSlash: true,
   reactStrictMode: true,
-  poweredByHeader: false,
-  async headers() {
-    return [{ source: '/:path*', headers: SECURITY_HEADERS }];
-  },
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

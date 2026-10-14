@@ -1,5 +1,6 @@
 'use client';
 
+import { SettingsButton } from './SettingsButton';
 import { StatusPill } from './StatusPill';
 import type { Status } from '@/lib/telemetry/types';
 
@@ -7,6 +8,7 @@ export interface DashboardHeaderProps {
   status: Status;
   agoLabel: string;
   isDemo: boolean;
+  connected: boolean;
   loading: boolean;
   onRefresh: () => void;
 }
@@ -15,6 +17,7 @@ export function DashboardHeader({
   status,
   agoLabel,
   isDemo,
+  connected,
   loading,
   onRefresh,
 }: DashboardHeaderProps) {
@@ -31,12 +34,15 @@ export function DashboardHeader({
         ) : null}
       </div>
 
-      <StatusPill
-        status={status}
-        agoLabel={agoLabel}
-        onRefresh={onRefresh}
-        loading={loading}
-      />
+      <div className="flex items-center gap-2">
+        <StatusPill
+          status={status}
+          agoLabel={agoLabel}
+          onRefresh={onRefresh}
+          loading={loading}
+        />
+        <SettingsButton connected={connected} />
+      </div>
     </header>
   );
 }

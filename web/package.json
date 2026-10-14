@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "prestart": "node scripts/ensure-build.mjs",
-    "start": "next start",
+    "prepreview": "node scripts/ensure-export.mjs",
+    "preview": "serve out -l 3000",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "typecheck": "tsc --noEmit",
@@ -39,6 +39,7 @@
     "eslint-config-prettier": "^9.1.0",
     "postcss": "^8.4.38",
     "prettier": "^3.3.3",
+    "serve": "^14.2.4",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vitest": "^2.1.8"
