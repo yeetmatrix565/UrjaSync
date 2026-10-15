@@ -16,7 +16,7 @@ export function HeadlineStats() {
   const { snapshot } = useTelemetryContext();
 
   const headline = [
-    { label: 'pack voltage', value: fmt(snapshot.packV, 2), unit: 'V', color: '#22d3ee' },
+    { label: 'voltage', value: fmt(snapshot.packV, 2), unit: 'V', color: '#22d3ee' },
     { label: 'soc', value: fmtInt(snapshot.soc), unit: '%', color: '#30d158' },
     { label: 'current', value: fmt(snapshot.currentA, 2), unit: 'A', color: '#a78bfa' },
   ];

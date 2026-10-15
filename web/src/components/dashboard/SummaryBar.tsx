@@ -67,7 +67,7 @@ export function SummaryBar() {
 
       <p className="mt-2.5 truncate font-mono text-[10px] uppercase tracking-widest text-white/50">
         {metrics.sampleCount} samples
-        {windowLabel ? ` · ${windowLabel} window` : ''} · updated {agoLabel}
+        {windowLabel ? ` · ${windowLabel}` : ''} · updated {agoLabel}
       </p>
     </header>
   );
