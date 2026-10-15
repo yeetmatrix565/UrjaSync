@@ -53,7 +53,12 @@ export function MetricCard({
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-cyan-200/90 transition group-hover:border-cyan-300/25 group-hover:text-cyan-200">
           {icon}
         </span>
-        <span className="min-w-0 flex-1 truncate label-xs">{title}</span>
+        {/* Deliberately not the `label-xs` token: at 11px with 0.18em tracking it
+            no longer fits an 11-character title (TEMPERATURE) in a half-width
+            square card, where the icon and status dot already take ~46px. */}
+        <span className="min-w-0 flex-1 truncate font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white/60">
+          {title}
+        </span>
         <StatusDot status={status} />
       </div>
 

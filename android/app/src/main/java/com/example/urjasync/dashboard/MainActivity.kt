@@ -15,7 +15,9 @@ import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
+import java.net.URLConnection
 import java.util.zip.ZipInputStream
 
 /** Must match CONFIG_CHANGED_EVENT in web/src/lib/telemetry/bridge.ts. */
@@ -59,7 +61,7 @@ class MainActivity : Activity() {
         // Serving from a virtual https origin means absolute /_next/... paths
         // resolve and localStorage works, neither of which holds on file://.
         assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/", WebViewAssetLoader.InternalStoragePathHandler(this, dashboardDir))
+            .addPathHandler("/", DashboardPathHandler(dashboardDir))
             .build()
 
         webView = WebView(this).apply {
@@ -196,6 +198,60 @@ class MainActivity : Activity() {
             runOnUiThread {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
+        }
+    }
+
+    /**
+     * Serves the unpacked dashboard, resolving a directory URL to its index page.
+     *
+     * WebViewAssetLoader's own InternalStoragePathHandler maps a URL straight to a
+     * file, so a route URL like `/pack/` - which the export writes as the directory
+     * `pack/` containing `index.html` - resolves to a directory and fails with
+     * ERR_INVALID_RESPONSE. Real routes are deliberate here (they are what makes the
+     * hardware back button work), so without this any *hard* load of a route - a
+     * reload, or the WebView restoring its URL after the process is killed - shows
+     * "Web page not available" instead of the screen.
+     */
+    private class DashboardPathHandler(private val root: File) : WebViewAssetLoader.PathHandler {
+
+        private val rootPath = root.canonicalPath
+
+        override fun handle(path: String): WebResourceResponse? {
+            val target = File(root, path.trimStart('/'))
+            // `/pack/` means `pack/index.html`; `/` means the root index.
+            val file = if (target.isDirectory) File(target, "index.html") else target
+
+            // Never serve anything outside the unpacked dashboard.
+            if (!file.canonicalPath.startsWith(rootPath + File.separator)) return null
+            if (!file.isFile) return null
+
+            val mime = mimeTypeOf(file.name)
+            val encoding =
+                if (mime.startsWith("text/") || mime == "application/json" || mime == "image/svg+xml") {
+                    "utf-8"
+                } else {
+                    null
+                }
+
+            return WebResourceResponse(mime, encoding, FileInputStream(file))
+        }
+
+        private fun mimeTypeOf(name: String): String = when {
+            name.endsWith(".html") -> "text/html"
+            name.endsWith(".js") || name.endsWith(".mjs") -> "text/javascript"
+            name.endsWith(".css") -> "text/css"
+            name.endsWith(".json") || name.endsWith(".map") -> "application/json"
+            // The App Router fetches these for client-side navigation.
+            name.endsWith(".txt") -> "text/plain"
+            name.endsWith(".svg") -> "image/svg+xml"
+            name.endsWith(".woff2") -> "font/woff2"
+            name.endsWith(".woff") -> "font/woff"
+            name.endsWith(".png") -> "image/png"
+            name.endsWith(".jpg") || name.endsWith(".jpeg") -> "image/jpeg"
+            name.endsWith(".webp") -> "image/webp"
+            name.endsWith(".ico") -> "image/x-icon"
+            name.endsWith(".mp4") -> "video/mp4"
+            else -> URLConnection.guessContentTypeFromName(name) ?: "application/octet-stream"
         }
     }
 

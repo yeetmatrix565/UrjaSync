@@ -168,7 +168,7 @@ export default function DashboardPage() {
       icon: <HealthIcon />,
       value: fmtInt(snapshot.soc),
       unit: '%',
-      hint: `SOH ${fmtInt(snapshot.soh)}% · advisory limits`,
+      hint: `SOH ${fmtInt(snapshot.soh)}% · advisory`,
       spark: metrics.soc.values,
       sparkColor: '#8b5cf6',
       available: hasFinite(metrics.soc.values) || hasFinite(metrics.soh.values),
